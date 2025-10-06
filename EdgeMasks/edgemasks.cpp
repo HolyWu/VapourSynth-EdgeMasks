@@ -62,7 +62,13 @@ static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RE
                 scalar_t gx, gy;
                 float g;
 
-                if constexpr (Operator == Prewitt) {
+                if constexpr (Operator == Tritical) {
+                    gx = a10 - a12;
+                    gy = a01 - a21;
+                } else if constexpr (Operator == Cross) {
+                    gx = a00 - a22;
+                    gy = a02 - a20;
+                } else if constexpr (Operator == Prewitt) {
                     gx = a00 + a10 + a20 - a02 - a12 - a22;
                     gy = a00 + a01 + a02 - a20 - a21 - a22;
                 } else if constexpr (Operator == Sobel) {
@@ -223,7 +229,11 @@ static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RE
 
 template<typename pixel_t>
 static auto selectC(const std::string& filterName) noexcept {
-    if (filterName == "Prewitt")
+    if (filterName == "Tritical")
+        return filterC<pixel_t, Tritical, true>;
+    else if (filterName == "Cross")
+        return filterC<pixel_t, Cross, true>;
+    else if (filterName == "Prewitt")
         return filterC<pixel_t, Prewitt, true>;
     else if (filterName == "Sobel")
         return filterC<pixel_t, Sobel, true>;
@@ -251,7 +261,11 @@ static auto selectC(const std::string& filterName) noexcept {
 
 template<typename pixel_t>
 static auto selectSSE4(const std::string& filterName) noexcept {
-    if (filterName == "Prewitt")
+    if (filterName == "Tritical")
+        return filterSSE4<pixel_t, Tritical, true>;
+    else if (filterName == "Cross")
+        return filterSSE4<pixel_t, Cross, true>;
+    else if (filterName == "Prewitt")
         return filterSSE4<pixel_t, Prewitt, true>;
     else if (filterName == "Sobel")
         return filterSSE4<pixel_t, Sobel, true>;
@@ -279,7 +293,11 @@ static auto selectSSE4(const std::string& filterName) noexcept {
 
 template<typename pixel_t>
 static auto selectAVX2(const std::string& filterName) noexcept {
-    if (filterName == "Prewitt")
+    if (filterName == "Tritical")
+        return filterAVX2<pixel_t, Tritical, true>;
+    else if (filterName == "Cross")
+        return filterAVX2<pixel_t, Cross, true>;
+    else if (filterName == "Prewitt")
         return filterAVX2<pixel_t, Prewitt, true>;
     else if (filterName == "Sobel")
         return filterAVX2<pixel_t, Sobel, true>;
@@ -307,7 +325,11 @@ static auto selectAVX2(const std::string& filterName) noexcept {
 
 template<typename pixel_t>
 static auto selectAVX512(const std::string& filterName) noexcept {
-    if (filterName == "Prewitt")
+    if (filterName == "Tritical")
+        return filterAVX512<pixel_t, Tritical, true>;
+    else if (filterName == "Cross")
+        return filterAVX512<pixel_t, Cross, true>;
+    else if (filterName == "Prewitt")
         return filterAVX512<pixel_t, Prewitt, true>;
     else if (filterName == "Sobel")
         return filterAVX512<pixel_t, Sobel, true>;
@@ -494,10 +516,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
                          plugin);
 
     const char* operators[] = {
-        "Prewitt", "Sobel", "Scharr", "RScharr", "Kroon", "Robinson3", "Robinson5", "Kirsch", "ExPrewitt", "ExSobel", "FDoG", "ExKirsch"
+        "Tritical", "Cross", "Prewitt", "Sobel", "Scharr", "RScharr", "Kroon", "Robinson3", "Robinson5", "Kirsch", "ExPrewitt", "ExSobel", "FDoG", "ExKirsch"
     };
 
-    for (int i = 0; i < 12; i++)
+    for (int i = 0; i < 14; i++)
         vspapi->registerFunction(operators[i],
                                  "clip:vnode;planes:int[]:opt;scale:float:opt;opt:int:opt;",
                                  "clip:vnode;",

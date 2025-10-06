@@ -47,7 +47,13 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                 vector_t gx, gy, g;
                 Vec16f gxF, gyF, gF;
 
-                if constexpr (Operator == Prewitt) {
+                if constexpr (Operator == Tritical) {
+                    gx = a10 - a12;
+                    gy = a01 - a21;
+                } else if constexpr (Operator == Cross) {
+                    gx = a00 - a22;
+                    gy = a02 - a20;
+                } else if constexpr (Operator == Prewitt) {
                     gx = a00 + a10 + a20 - a02 - a12 - a22;
                     gy = a00 + a01 + a02 - a20 - a21 - a22;
                 } else if constexpr (Operator == Sobel) {
@@ -274,6 +280,8 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
     }
 }
 
+template void filterAVX512<uint8_t, Tritical, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
+template void filterAVX512<uint8_t, Cross, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint8_t, Prewitt, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint8_t, Sobel, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint8_t, Scharr, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
@@ -287,6 +295,8 @@ template void filterAVX512<uint8_t, ExSobel, true>(const VSFrame* src, VSFrame* 
 template void filterAVX512<uint8_t, FDoG, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint8_t, ExKirsch, false>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 
+template void filterAVX512<uint16_t, Tritical, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
+template void filterAVX512<uint16_t, Cross, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint16_t, Prewitt, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint16_t, Sobel, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint16_t, Scharr, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
@@ -300,6 +310,8 @@ template void filterAVX512<uint16_t, ExSobel, true>(const VSFrame* src, VSFrame*
 template void filterAVX512<uint16_t, FDoG, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<uint16_t, ExKirsch, false>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 
+template void filterAVX512<float, Tritical, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
+template void filterAVX512<float, Cross, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<float, Prewitt, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<float, Sobel, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 template void filterAVX512<float, Scharr, true>(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;

@@ -21,6 +21,8 @@ struct EdgeMasksData final {
 };
 
 enum Operator {
+    Tritical,
+    Cross,
     Prewitt,
     Sobel,
     Scharr,
