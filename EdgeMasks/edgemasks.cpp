@@ -449,6 +449,15 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         if (opt < 0 || opt > 4)
             throw "opt must be 0, 1, 2, 3, or 4";
 
+        if (d->filterName == "Scharr")
+            d->scale /= 3;
+        else if (d->filterName == "RScharr")
+            d->scale /= 47;
+        else if (d->filterName == "Kroon")
+            d->scale /= 17;
+        else if (d->filterName == "FDoG")
+            d->scale /= 2;
+
         {
 #ifdef EDGEMASKS_X86
             const int iset = instrset_detect();
