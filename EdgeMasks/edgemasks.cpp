@@ -143,7 +143,7 @@ static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RE
                 if constexpr (euclidean)
                     g = std::sqrt(static_cast<float>(gx) * gx + static_cast<float>(gy) * gy);
 
-                g *= d->scale;
+                g *= d->scale[plane];
 
                 if constexpr (std::is_integral_v<pixel_t>)
                     return std::min(static_cast<int>(g + 0.5f), d->peak);
@@ -416,9 +416,22 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
             d->process[n] = true;
         }
 
-        d->scale = vsapi->mapGetFloatSaturated(in, "scale", 0, &err);
-        if (err)
-            d->scale = 1.0f;
+        if (vsapi->mapNumElements(in, "scale") > d->vi->format.numPlanes)
+            throw "scale has more values specified than there are planes";
+
+        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
+            d->scale[plane] = vsapi->mapGetFloatSaturated(in, "scale", plane, &err);
+
+            if (err) {
+                if (plane == 0)
+                    d->scale[plane] = 1.0f;
+                else
+                    d->scale[plane] = d->scale[plane - 1];
+            } else {
+                if (d->scale[plane] <= 0.0f)
+                    throw "scale must be greater than 0.0";
+            }
+        }
 
         const int opt = vsapi->mapGetIntSaturated(in, "opt", 0, &err);
 
@@ -443,20 +456,19 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         }
         vsapi->freeFrame(frame);
 
-        if (d->scale <= 0.0f)
-            throw "scale must be greater than 0.0";
-
         if (opt < 0 || opt > 4)
             throw "opt must be 0, 1, 2, 3, or 4";
 
-        if (d->filterName == "Scharr")
-            d->scale /= 3;
-        else if (d->filterName == "RScharr")
-            d->scale /= 47;
-        else if (d->filterName == "Kroon")
-            d->scale /= 17;
-        else if (d->filterName == "FDoG")
-            d->scale /= 2;
+        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
+            if (d->filterName == "Scharr")
+                d->scale[plane] /= 3;
+            else if (d->filterName == "RScharr")
+                d->scale[plane] /= 47;
+            else if (d->filterName == "Kroon")
+                d->scale[plane] /= 17;
+            else if (d->filterName == "FDoG")
+                d->scale[plane] /= 2;
+        }
 
         {
 #ifdef EDGEMASKS_X86
@@ -530,7 +542,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 
     for (int i = 0; i < 14; i++)
         vspapi->registerFunction(operators[i],
-                                 "clip:vnode;planes:int[]:opt;scale:float:opt;opt:int:opt;",
+                                 "clip:vnode;planes:int[]:opt;scale:float[]:opt;opt:int:opt;",
                                  "clip:vnode;",
                                  edgemasksCreate,
                                  const_cast<char*>(operators[i]),

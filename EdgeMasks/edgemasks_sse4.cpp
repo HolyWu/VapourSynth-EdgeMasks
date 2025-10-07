@@ -144,7 +144,7 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
                 if constexpr (euclidean)
                     gF = sqrt(gxF * gxF + gyF * gyF);
 
-                gF *= d->scale;
+                gF *= d->scale[plane];
 
                 if constexpr (std::is_integral_v<pixel_t>)
                     return truncatei(gF + 0.5f);
