@@ -29,6 +29,8 @@
 
 #include "edgemasks.h"
 
+using namespace std::string_literals;
+
 #ifdef EDGEMASKS_X86
 template<typename pixel_t, int Operator, bool euclidean>
 extern void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
@@ -397,7 +399,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         if (!vsh::isConstantVideoFormat(d->vi) ||
             (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) ||
             (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
-            throw "only constant format 8-16 bit integer and 32 bit float input supported";
+            throw "only constant format 8-16 bit integer and 32 bit float input supported"s;
 
         const int m = vsapi->mapNumElements(in, "planes");
 
@@ -408,16 +410,16 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
             const int n = vsapi->mapGetIntSaturated(in, "planes", i, nullptr);
 
             if (n < 0 || n >= d->vi->format.numPlanes)
-                throw "plane index out of range";
+                throw "plane index out of range"s;
 
             if (d->process[n])
-                throw "plane specified twice";
+                throw "plane specified twice"s;
 
             d->process[n] = true;
         }
 
         if (vsapi->mapNumElements(in, "scale") > d->vi->format.numPlanes)
-            throw "scale has more values specified than there are planes";
+            throw "scale has more values specified than there are planes"s;
 
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
             d->scale[plane] = vsapi->mapGetFloatSaturated(in, "scale", plane, &err);
@@ -429,7 +431,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
                     d->scale[plane] = d->scale[plane - 1];
             } else {
                 if (d->scale[plane] <= 0.0f)
-                    throw "scale must be greater than 0.0";
+                    throw "scale must be greater than 0.0"s;
             }
         }
 
@@ -457,7 +459,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         vsapi->freeFrame(frame);
 
         if (opt < 0 || opt > 4)
-            throw "opt must be 0, 1, 2, 3, or 4";
+            throw "opt must be 0, 1, 2, 3, or 4"s;
 
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
             if (d->filterName == "Scharr")
