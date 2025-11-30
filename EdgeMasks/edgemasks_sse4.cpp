@@ -31,7 +31,7 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
         if (d->process[plane]) {
             const int width = vsapi->getFrameWidth(src, plane);
             const int height = vsapi->getFrameHeight(src, plane);
-            const ptrdiff_t stride = vsapi->getStride(src, plane) / d->vi->format.bytesPerSample;
+            const ptrdiff_t stride = vsapi->getStride(src, plane) / sizeof(pixel_t);
             auto srcp0 = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, plane));
             auto dstp = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, plane));
 

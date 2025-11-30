@@ -1,7 +1,7 @@
 project('EdgeMasks', 'cpp',
   default_options: ['buildtype=release', 'warning_level=2', 'b_lto=true', 'b_ndebug=if-release', 'cpp_std=c++17'],
   license: 'MIT',
-  meson_version: '>=0.51.0',
+  meson_version: '>=0.58.0',
   version: '3.1',
 )
 
@@ -17,7 +17,7 @@ sources = files('EdgeMasks/edgemasks.cpp')
 
 if gcc_syntax
   vapoursynth_dep = dependency('vapoursynth', version: '>=55').partial_dependency(compile_args: true, includes: true)
-  install_dir = vapoursynth_dep.get_variable(pkgconfig: 'libdir') / 'vapoursynth'
+  install_dir = vapoursynth_dep.get_variable('libdir') / 'vapoursynth'
 else
   vapoursynth_dep = []
   install_dir = get_option('libdir') / 'vapoursynth'
