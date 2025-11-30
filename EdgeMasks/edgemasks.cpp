@@ -535,7 +535,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
     vspapi->configPlugin("com.holywu.edgemasks",
                          "edgemasks",
                          "Creates an edge mask using various operators",
-                         VS_MAKE_VERSION(3, 1),
+                         VS_MAKE_VERSION(3, 2),
                          VAPOURSYNTH_API_VERSION,
                          0,
                          plugin);
