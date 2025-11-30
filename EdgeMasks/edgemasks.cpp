@@ -261,6 +261,7 @@ static auto selectC(const std::string& filterName) noexcept {
         return filterC<pixel_t, ExKirsch, false>;
 }
 
+#ifdef EDGEMASKS_X86
 template<typename pixel_t>
 static auto selectSSE4(const std::string& filterName) noexcept {
     if (filterName == "Tritical")
@@ -356,6 +357,7 @@ static auto selectAVX512(const std::string& filterName) noexcept {
     else
         return filterAVX512<pixel_t, ExKirsch, false>;
 }
+#endif
 
 static const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
                                               VSCore* core, const VSAPI* vsapi) {
