@@ -1,6 +1,6 @@
 # EdgeMasks
 
-Creates an edge mask using various operators
+Creates an edge mask using various operators.
 
 
 ## Parameters
@@ -39,7 +39,7 @@ edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int o
 ## Compilation
 
 ```
-meson build
-ninja -C build
-ninja -C build install
+meson setup build
+meson compile -C build
+meson install -C build
 ```

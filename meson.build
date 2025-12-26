@@ -13,8 +13,6 @@ if get_option('buildtype') == 'release'
   add_project_arguments(gcc_syntax ? ['-fno-math-errno', '-fno-trapping-math'] : '/GS-', language: 'cpp')
 endif
 
-sources = files('EdgeMasks/edgemasks.cpp')
-
 if gcc_syntax
   vapoursynth_dep = dependency('vapoursynth', version: '>=55').partial_dependency(compile_args: true, includes: true)
   install_dir = vapoursynth_dep.get_variable('libdir') / 'vapoursynth'
@@ -56,7 +54,7 @@ if host_machine.cpu_family().startswith('x86')
 endif
 
 shared_module('edgemasks',
-  sources,
+  files('EdgeMasks/edgemasks.cpp'),
   dependencies: vapoursynth_dep,
   gnu_symbol_visibility: 'hidden',
   install: true,
