@@ -330,7 +330,8 @@ static Operator getOperatorFromName(const char* name) noexcept {
     if (strcmp(name, "ExPrewitt") == 0) return ExPrewitt;
     if (strcmp(name, "ExSobel") == 0)   return ExSobel;
     if (strcmp(name, "FDoG") == 0)      return FDoG;
-    return ExKirsch;
+    if (strcmp(name, "ExKirsch") == 0)  return ExKirsch;
+    return Tritical;  // Default fallback, should never be reached
 }
 
 static const char* getNameFromOperator(Operator op) noexcept {
@@ -353,7 +354,7 @@ static const char* getNameFromOperator(Operator op) noexcept {
     }
 }
 
-static void VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
+static const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
                                               VSCore* core, const VSAPI* vsapi) {
     auto d = static_cast<const EdgeMasksData*>(instanceData);
 
