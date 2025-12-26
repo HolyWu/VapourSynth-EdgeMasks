@@ -444,21 +444,15 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         else
             d->matrix = 3;
 
-        auto frame = vsapi->getFrame(0, d->node, nullptr, 0);
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
             if (d->process[plane]) {
-                if (vsapi->getFrameWidth(frame, plane) < d->matrix) {
-                    vsapi->freeFrame(frame);
+                if (d->vi->width >> (plane > 0 ? d->vi->format.subSamplingW : 0) < d->matrix)
                     throw "plane's width must be greater than or equal to " + std::to_string(d->matrix);
-                }
 
-                if (vsapi->getFrameHeight(frame, plane) < d->matrix) {
-                    vsapi->freeFrame(frame);
+                if (d->vi->height >> (plane > 0 ? d->vi->format.subSamplingH : 0) < d->matrix)
                     throw "plane's height must be greater than or equal to " + std::to_string(d->matrix);
-                }
             }
         }
-        vsapi->freeFrame(frame);
 
         if (opt < 0 || opt > 4)
             throw "opt must be 0, 1, 2, 3, or 4"s;
