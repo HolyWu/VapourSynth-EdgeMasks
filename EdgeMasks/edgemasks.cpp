@@ -23,6 +23,7 @@
 */
 
 #include <cmath>
+#include <cstring>
 
 #include <algorithm>
 #include <memory>
@@ -230,136 +231,129 @@ static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RE
 }
 
 template<typename pixel_t>
-static auto selectC(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterC<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterC<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterC<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterC<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterC<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterC<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterC<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterC<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterC<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterC<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterC<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterC<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterC<pixel_t, FDoG, true>;
-    else
-        return filterC<pixel_t, ExKirsch, false>;
+static auto selectC(Operator op) noexcept {
+    switch (op) {
+        case Tritical:  return filterC<pixel_t, Tritical, true>;
+        case Cross:     return filterC<pixel_t, Cross, true>;
+        case Prewitt:   return filterC<pixel_t, Prewitt, true>;
+        case Sobel:     return filterC<pixel_t, Sobel, true>;
+        case Scharr:    return filterC<pixel_t, Scharr, true>;
+        case RScharr:   return filterC<pixel_t, RScharr, true>;
+        case Kroon:     return filterC<pixel_t, Kroon, true>;
+        case Robinson3: return filterC<pixel_t, Robinson3, false>;
+        case Robinson5: return filterC<pixel_t, Robinson5, false>;
+        case Kirsch:    return filterC<pixel_t, Kirsch, false>;
+        case ExPrewitt: return filterC<pixel_t, ExPrewitt, true>;
+        case ExSobel:   return filterC<pixel_t, ExSobel, true>;
+        case FDoG:      return filterC<pixel_t, FDoG, true>;
+        case ExKirsch:  return filterC<pixel_t, ExKirsch, false>;
+        default:        return filterC<pixel_t, Tritical, true>;
+    }
 }
 
 #ifdef EDGEMASKS_X86
 template<typename pixel_t>
-static auto selectSSE4(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterSSE4<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterSSE4<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterSSE4<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterSSE4<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterSSE4<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterSSE4<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterSSE4<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterSSE4<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterSSE4<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterSSE4<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterSSE4<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterSSE4<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterSSE4<pixel_t, FDoG, true>;
-    else
-        return filterSSE4<pixel_t, ExKirsch, false>;
+static auto selectSSE4(Operator op) noexcept {
+    switch (op) {
+        case Tritical:  return filterSSE4<pixel_t, Tritical, true>;
+        case Cross:     return filterSSE4<pixel_t, Cross, true>;
+        case Prewitt:   return filterSSE4<pixel_t, Prewitt, true>;
+        case Sobel:     return filterSSE4<pixel_t, Sobel, true>;
+        case Scharr:    return filterSSE4<pixel_t, Scharr, true>;
+        case RScharr:   return filterSSE4<pixel_t, RScharr, true>;
+        case Kroon:     return filterSSE4<pixel_t, Kroon, true>;
+        case Robinson3: return filterSSE4<pixel_t, Robinson3, false>;
+        case Robinson5: return filterSSE4<pixel_t, Robinson5, false>;
+        case Kirsch:    return filterSSE4<pixel_t, Kirsch, false>;
+        case ExPrewitt: return filterSSE4<pixel_t, ExPrewitt, true>;
+        case ExSobel:   return filterSSE4<pixel_t, ExSobel, true>;
+        case FDoG:      return filterSSE4<pixel_t, FDoG, true>;
+        case ExKirsch:  return filterSSE4<pixel_t, ExKirsch, false>;
+        default:        return filterSSE4<pixel_t, Tritical, true>;
+    }
 }
 
 template<typename pixel_t>
-static auto selectAVX2(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterAVX2<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterAVX2<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterAVX2<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterAVX2<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterAVX2<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterAVX2<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterAVX2<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterAVX2<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterAVX2<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterAVX2<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterAVX2<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterAVX2<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterAVX2<pixel_t, FDoG, true>;
-    else
-        return filterAVX2<pixel_t, ExKirsch, false>;
+static auto selectAVX2(Operator op) noexcept {
+    switch (op) {
+        case Tritical:  return filterAVX2<pixel_t, Tritical, true>;
+        case Cross:     return filterAVX2<pixel_t, Cross, true>;
+        case Prewitt:   return filterAVX2<pixel_t, Prewitt, true>;
+        case Sobel:     return filterAVX2<pixel_t, Sobel, true>;
+        case Scharr:    return filterAVX2<pixel_t, Scharr, true>;
+        case RScharr:   return filterAVX2<pixel_t, RScharr, true>;
+        case Kroon:     return filterAVX2<pixel_t, Kroon, true>;
+        case Robinson3: return filterAVX2<pixel_t, Robinson3, false>;
+        case Robinson5: return filterAVX2<pixel_t, Robinson5, false>;
+        case Kirsch:    return filterAVX2<pixel_t, Kirsch, false>;
+        case ExPrewitt: return filterAVX2<pixel_t, ExPrewitt, true>;
+        case ExSobel:   return filterAVX2<pixel_t, ExSobel, true>;
+        case FDoG:      return filterAVX2<pixel_t, FDoG, true>;
+        case ExKirsch:  return filterAVX2<pixel_t, ExKirsch, false>;
+        default:        return filterAVX2<pixel_t, Tritical, true>;
+    }
 }
 
 template<typename pixel_t>
-static auto selectAVX512(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterAVX512<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterAVX512<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterAVX512<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterAVX512<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterAVX512<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterAVX512<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterAVX512<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterAVX512<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterAVX512<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterAVX512<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterAVX512<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterAVX512<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterAVX512<pixel_t, FDoG, true>;
-    else
-        return filterAVX512<pixel_t, ExKirsch, false>;
+static auto selectAVX512(Operator op) noexcept {
+    switch (op) {
+        case Tritical:  return filterAVX512<pixel_t, Tritical, true>;
+        case Cross:     return filterAVX512<pixel_t, Cross, true>;
+        case Prewitt:   return filterAVX512<pixel_t, Prewitt, true>;
+        case Sobel:     return filterAVX512<pixel_t, Sobel, true>;
+        case Scharr:    return filterAVX512<pixel_t, Scharr, true>;
+        case RScharr:   return filterAVX512<pixel_t, RScharr, true>;
+        case Kroon:     return filterAVX512<pixel_t, Kroon, true>;
+        case Robinson3: return filterAVX512<pixel_t, Robinson3, false>;
+        case Robinson5: return filterAVX512<pixel_t, Robinson5, false>;
+        case Kirsch:    return filterAVX512<pixel_t, Kirsch, false>;
+        case ExPrewitt: return filterAVX512<pixel_t, ExPrewitt, true>;
+        case ExSobel:   return filterAVX512<pixel_t, ExSobel, true>;
+        case FDoG:      return filterAVX512<pixel_t, FDoG, true>;
+        case ExKirsch:  return filterAVX512<pixel_t, ExKirsch, false>;
+        default:        return filterAVX512<pixel_t, Tritical, true>;
+    }
 }
 #endif
 
-static const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
+static Operator getOperatorFromName(const char* name) noexcept {
+    if (strcmp(name, "Tritical") == 0)  return Tritical;
+    if (strcmp(name, "Cross") == 0)     return Cross;
+    if (strcmp(name, "Prewitt") == 0)   return Prewitt;
+    if (strcmp(name, "Sobel") == 0)     return Sobel;
+    if (strcmp(name, "Scharr") == 0)    return Scharr;
+    if (strcmp(name, "RScharr") == 0)   return RScharr;
+    if (strcmp(name, "Kroon") == 0)     return Kroon;
+    if (strcmp(name, "Robinson3") == 0) return Robinson3;
+    if (strcmp(name, "Robinson5") == 0) return Robinson5;
+    if (strcmp(name, "Kirsch") == 0)    return Kirsch;
+    if (strcmp(name, "ExPrewitt") == 0) return ExPrewitt;
+    if (strcmp(name, "ExSobel") == 0)   return ExSobel;
+    if (strcmp(name, "FDoG") == 0)      return FDoG;
+    return ExKirsch;
+}
+
+static const char* getNameFromOperator(Operator op) noexcept {
+    switch (op) {
+        case Tritical:  return "Tritical";
+        case Cross:     return "Cross";
+        case Prewitt:   return "Prewitt";
+        case Sobel:     return "Sobel";
+        case Scharr:    return "Scharr";
+        case RScharr:   return "RScharr";
+        case Kroon:     return "Kroon";
+        case Robinson3: return "Robinson3";
+        case Robinson5: return "Robinson5";
+        case Kirsch:    return "Kirsch";
+        case ExPrewitt: return "ExPrewitt";
+        case ExSobel:   return "ExSobel";
+        case FDoG:      return "FDoG";
+        case ExKirsch:  return "ExKirsch";
+        default:        return "Tritical";
+    }
+}
+
+static void VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
                                               VSCore* core, const VSAPI* vsapi) {
     auto d = static_cast<const EdgeMasksData*>(instanceData);
 
@@ -391,7 +385,8 @@ static void VS_CC edgemasksFree(void* instanceData, [[maybe_unused]] VSCore* cor
 static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi) {
     auto d = std::make_unique<EdgeMasksData>();
 
-    d->filterName = static_cast<const char*>(userData);
+    const char* filterName = static_cast<const char*>(userData);
+    d->op = getOperatorFromName(filterName);
 
     try {
         d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
@@ -439,39 +434,41 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
 
         const int opt = vsapi->mapGetIntSaturated(in, "opt", 0, &err);
 
-        if (d->filterName == "ExPrewitt" || d->filterName == "ExSobel" || d->filterName == "FDoG" || d->filterName == "ExKirsch")
+        if (d->op == ExPrewitt || d->op == ExSobel || d->op == FDoG || d->op == ExKirsch)
             d->matrix = 5;
         else
             d->matrix = 3;
 
-        auto frame = vsapi->getFrame(0, d->node, nullptr, 0);
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
             if (d->process[plane]) {
-                if (vsapi->getFrameWidth(frame, plane) < d->matrix) {
-                    vsapi->freeFrame(frame);
+                if (d->vi->width >> (plane > 0 ? d->vi->format.subSamplingW : 0) < d->matrix)
                     throw "plane's width must be greater than or equal to " + std::to_string(d->matrix);
-                }
 
-                if (vsapi->getFrameHeight(frame, plane) < d->matrix) {
-                    vsapi->freeFrame(frame);
+                if (d->vi->height >> (plane > 0 ? d->vi->format.subSamplingH : 0) < d->matrix)
                     throw "plane's height must be greater than or equal to " + std::to_string(d->matrix);
-                }
             }
         }
-        vsapi->freeFrame(frame);
 
         if (opt < 0 || opt > 4)
             throw "opt must be 0, 1, 2, 3, or 4"s;
 
         for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            if (d->filterName == "Scharr")
-                d->scale[plane] /= 3;
-            else if (d->filterName == "RScharr")
-                d->scale[plane] /= 47;
-            else if (d->filterName == "Kroon")
-                d->scale[plane] /= 17;
-            else if (d->filterName == "FDoG")
-                d->scale[plane] /= 2;
+            switch (d->op) {
+                case Scharr:
+                    d->scale[plane] /= 3;
+                    break;
+                case RScharr:
+                    d->scale[plane] /= 47;
+                    break;
+                case Kroon:
+                    d->scale[plane] /= 17;
+                    break;
+                case FDoG:
+                    d->scale[plane] /= 2;
+                    break;
+                default:
+                    break;
+            }
         }
 
         {
@@ -480,37 +477,37 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
 #endif
 
             if (d->vi->format.bytesPerSample == 1) {
-                d->filter = selectC<uint8_t>(d->filterName);
+                d->filter = selectC<uint8_t>(d->op);
 
 #ifdef EDGEMASKS_X86
                 if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<uint8_t>(d->filterName);
+                    d->filter = selectAVX512<uint8_t>(d->op);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<uint8_t>(d->filterName);
+                    d->filter = selectAVX2<uint8_t>(d->op);
                 else if ((opt == 0 && iset >= 5) || opt == 2)
-                    d->filter = selectSSE4<uint8_t>(d->filterName);
+                    d->filter = selectSSE4<uint8_t>(d->op);
 #endif
             } else if (d->vi->format.bytesPerSample == 2) {
-                d->filter = selectC<uint16_t>(d->filterName);
+                d->filter = selectC<uint16_t>(d->op);
 
 #ifdef EDGEMASKS_X86
                 if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<uint16_t>(d->filterName);
+                    d->filter = selectAVX512<uint16_t>(d->op);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<uint16_t>(d->filterName);
+                    d->filter = selectAVX2<uint16_t>(d->op);
                 else if ((opt == 0 && iset >= 5) || opt == 2)
-                    d->filter = selectSSE4<uint16_t>(d->filterName);
+                    d->filter = selectSSE4<uint16_t>(d->op);
 #endif
             } else {
-                d->filter = selectC<float>(d->filterName);
+                d->filter = selectC<float>(d->op);
 
 #ifdef EDGEMASKS_X86
                 if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<float>(d->filterName);
+                    d->filter = selectAVX512<float>(d->op);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<float>(d->filterName);
+                    d->filter = selectAVX2<float>(d->op);
                 else if ((opt == 0 && iset >= 5) || opt == 2)
-                    d->filter = selectSSE4<float>(d->filterName);
+                    d->filter = selectSSE4<float>(d->op);
 #endif
             }
         }
@@ -518,13 +515,13 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         if (d->vi->format.sampleType == stInteger)
             d->peak = (1 << d->vi->format.bitsPerSample) - 1;
     } catch (const std::string& error) {
-        vsapi->mapSetError(out, (d->filterName + ": " + error).c_str());
+        vsapi->mapSetError(out, (std::string(getNameFromOperator(d->op)) + ": " + error).c_str());
         vsapi->freeNode(d->node);
         return;
     }
 
     VSFilterDependency deps[] = { {d->node, rpStrictSpatial} };
-    vsapi->createVideoFilter(out, d->filterName.c_str(), d->vi, edgemasksGetFrame, edgemasksFree, fmParallel, deps, 1, d.get(), core);
+    vsapi->createVideoFilter(out, getNameFromOperator(d->op), d->vi, edgemasksGetFrame, edgemasksFree, fmParallel, deps, 1, d.get(), core);
     d.release();
 }
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <type_traits>
 
 #include <VapourSynth4.h>
@@ -9,16 +8,6 @@
 #ifdef EDGEMASKS_X86
 #include "vectorclass/vectorclass.h"
 #endif
-
-struct EdgeMasksData final {
-    VSNode* node;
-    const VSVideoInfo* vi;
-    bool process[3];
-    float scale[3];
-    int matrix, peak;
-    std::string filterName;
-    void (*filter)(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
-};
 
 enum Operator {
     Tritical,
@@ -35,4 +24,14 @@ enum Operator {
     ExSobel,
     FDoG,
     ExKirsch
+};
+
+struct EdgeMasksData final {
+    VSNode* node;
+    const VSVideoInfo* vi;
+    bool process[3];
+    float scale[3];
+    int matrix, peak;
+    Operator op;
+    void (*filter)(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 };
