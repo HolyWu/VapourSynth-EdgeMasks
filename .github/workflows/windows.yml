@@ -1,0 +1,46 @@
+name: Windows
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          git
+          mingw-w64-ucrt-x86_64-ninja
+          mingw-w64-ucrt-x86_64-python-build
+          mingw-w64-ucrt-x86_64-python-wheel
+          mingw-w64-ucrt-x86_64-toolchain
+
+    - name: Build
+      run: |
+        python -m build
+
+    - name: Fix tag
+      run: |
+        cd dist
+        for whl in *.whl; do
+          wheel tags --remove --python-tag py3 --abi-tag none --platform-tag win_amd64 $whl
+        done
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: edgemasks-sdist
+        path: dist/*.tar.gz
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: edgemasks-win_amd64
+        path: dist/*.whl
