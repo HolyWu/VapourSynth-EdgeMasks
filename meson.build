@@ -5,7 +5,7 @@ project('EdgeMasks', 'cpp',
   version: '3.2',
 )
 
-incdir = include_directories('include/vapoursynth')
+incdir = include_directories(run_command(find_program('python', 'python3'), '-c', 'import vapoursynth as vs; print(vs.get_include())', check: true).stdout().strip())
 
 libs = []
 
