@@ -29,4 +29,4 @@ Repository = "https://github.com/HolyWu/VapourSynth-EdgeMasks"
 Issues = "https://github.com/HolyWu/VapourSynth-EdgeMasks/issues"
 
 [tool.meson-python.wheel]
-exclude = ["*/*.dll.a"]
+exclude = ["*.dll.a"]
