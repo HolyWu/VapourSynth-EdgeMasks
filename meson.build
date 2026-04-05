@@ -1,11 +1,19 @@
 project('EdgeMasks', 'cpp',
   default_options: ['buildtype=release', 'warning_level=2', 'b_lto=true', 'b_ndebug=if-release', 'cpp_std=c++17'],
   license: 'MIT',
+  license_files: 'LICENSE',
   meson_version: '>=1.2.3',
   version: '3.2',
 )
 
-incdir = include_directories(run_command(find_program('python', 'python3'), '-c', 'import vapoursynth as vs; print(vs.get_include())', check: true).stdout().strip())
+incdir = include_directories(
+  run_command(
+    find_program('python', 'python3'),
+    '-c',
+    'import vapoursynth as vs; print(vs.get_include())',
+    check: true,
+  ).stdout().strip(),
+)
 
 libs = []
 
@@ -47,7 +55,6 @@ shared_module('edgemasks',
   include_directories: incdir,
   install: true,
   install_dir: py.get_install_dir() / 'vapoursynth/plugins',
-  link_args: host_machine.system() in ['cygwin', 'windows'] ? '-static' : [],
   link_with: libs,
   name_prefix: '',
 )
