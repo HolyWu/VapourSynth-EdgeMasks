@@ -24,9 +24,11 @@ jobs:
 
     - uses: pypa/cibuildwheel@v3.4.0
       env:
-        CIBW_BUILD: cp312-*
+        CIBW_BUILD: cp314-*
+        CIBW_BUILD_FRONTEND: uv
       with:
         output-dir: dist
+        extras: uv
 
     - name: Fix tag
       run: |
@@ -57,19 +59,18 @@ jobs:
         install: >-
           mingw-w64-ucrt-x86_64-git
           mingw-w64-ucrt-x86_64-ninja
-          mingw-w64-ucrt-x86_64-python-build
-          mingw-w64-ucrt-x86_64-python-wheel
           mingw-w64-ucrt-x86_64-toolchain
+          mingw-w64-ucrt-x86_64-uv
 
     - name: Build
       run: |
-        python -m build -Csetup-args="-Dcpp_link_args=-static"
+        uv build -Csetup-args="-Dcpp_link_args=-static"
 
     - name: Fix tag
       run: |
         cd dist
         for whl in *.whl; do
-          wheel tags --remove --python-tag py3 --abi-tag none --platform-tag win_amd64 $whl
+          uvx wheel tags --remove --python-tag py3 --abi-tag none $whl
         done
 
     - uses: actions/upload-artifact@v7
