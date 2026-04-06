@@ -1,5 +1,5 @@
 [build-system]
-requires = ["meson-python", "VapourSynth>=74rc1"]
+requires = ["meson-python", "VapourSynth>=74"]
 build-backend = "mesonpy"
 
 [project]
@@ -21,7 +21,7 @@ classifiers = [
   "Programming Language :: C++",
   "Topic :: Multimedia :: Video",
 ]
-dependencies = ["VapourSynth>=74rc1"]
+dependencies = ["VapourSynth>=74"]
 dynamic = ["version"]
 
 [project.urls]
