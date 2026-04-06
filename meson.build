@@ -3,7 +3,7 @@ project('EdgeMasks', 'cpp',
   license: 'MIT',
   license_files: 'LICENSE',
   meson_version: '>=1.2.3',
-  version: '3.2',
+  version: '4.0',
 )
 
 incdir = include_directories(
