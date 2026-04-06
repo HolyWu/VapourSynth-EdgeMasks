@@ -19,6 +19,8 @@ libs = []
 
 py = import('python').find_installation(pure: false)
 
+add_project_arguments('-DVS_USE_LATEST_API', language: 'cpp')
+
 if host_machine.cpu_family().startswith('x86')
   add_project_arguments('-DEDGEMASKS_X86', language: 'cpp')
 

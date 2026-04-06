@@ -22,7 +22,7 @@ edgemasks.FDoG(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int opt=0
 edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int opt=0])
 ```
 
-- clip: Clip to process. Any format with either integer sample type of 8-16 bit depth or float sample type of 32 bit depth is supported. The output frames will have `_ColorRange` set to 0 (full range).
+- clip: Clip to process. Any format with either integer sample type of 8-16 bit depth or float sample type of 32 bit depth is supported. The output frames will have `_Range` set to 1 (full range).
 
 - planes: Specifies which planes will be processed. Any unprocessed planes will be simply copied.
 

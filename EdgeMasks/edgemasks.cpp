@@ -373,7 +373,7 @@ static const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void*
 
         d->filter(src, dst, d, vsapi);
 
-        vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_ColorRange", 0, maReplace);
+        vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", 1, maReplace);
 
         vsapi->freeFrame(src);
         return dst;
