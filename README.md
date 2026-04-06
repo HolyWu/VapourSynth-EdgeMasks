@@ -36,10 +36,8 @@ edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int o
   - 4 = use avx512
 
 
-## Compilation
+## Installation
 
 ```
-meson setup build
-meson compile -C build
-meson install -C build
+pip install -U vapoursynth-edgemasks
 ```
