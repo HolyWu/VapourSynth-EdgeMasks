@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include <VapourSynth4.h>
+#include <VSConstants4.h>
 #include <VSHelper4.h>
 
 #ifdef EDGEMASKS_X86
