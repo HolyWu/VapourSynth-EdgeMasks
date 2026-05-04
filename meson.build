@@ -3,7 +3,7 @@ project('EdgeMasks', 'cpp',
     license: 'MIT',
     license_files: 'LICENSE',
     meson_version: '>=1.2.3',
-    version: '4.0',
+    version: '4.1',
 )
 
 py = import('python').find_installation(pure: false)
