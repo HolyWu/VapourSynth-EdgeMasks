@@ -481,7 +481,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
                     d->filter = selectAVX512<uint8_t>(d->filterName);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
                     d->filter = selectAVX2<uint8_t>(d->filterName);
-                else if ((opt == 0 && iset >= 5) || opt == 2)
+                else if ((opt == 0 && iset >= 6) || opt == 2)
                     d->filter = selectSSE4<uint8_t>(d->filterName);
 #endif
             } else if (d->vi->format.bytesPerSample == 2) {
@@ -492,7 +492,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
                     d->filter = selectAVX512<uint16_t>(d->filterName);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
                     d->filter = selectAVX2<uint16_t>(d->filterName);
-                else if ((opt == 0 && iset >= 5) || opt == 2)
+                else if ((opt == 0 && iset >= 6) || opt == 2)
                     d->filter = selectSSE4<uint16_t>(d->filterName);
 #endif
             } else {
@@ -503,7 +503,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
                     d->filter = selectAVX512<float>(d->filterName);
                 else if ((opt == 0 && iset >= 8) || opt == 3)
                     d->filter = selectAVX2<float>(d->filterName);
-                else if ((opt == 0 && iset >= 5) || opt == 2)
+                else if ((opt == 0 && iset >= 6) || opt == 2)
                     d->filter = selectSSE4<float>(d->filterName);
 #endif
             }

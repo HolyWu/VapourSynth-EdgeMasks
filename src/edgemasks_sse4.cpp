@@ -1,5 +1,5 @@
 #ifdef EDGEMASKS_X86
-#define INSTRSET 5
+#define INSTRSET 6
 #include "edgemasks.h"
 
 template<typename pixel_t, int Operator, bool euclidean>

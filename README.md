@@ -31,7 +31,7 @@ edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int o
 - opt: Specifies which cpu optimizations to use.
   - 0 = auto detect
   - 1 = use c
-  - 2 = use sse4.1
+  - 2 = use sse4.2
   - 3 = use avx2
   - 4 = use avx512
 
