@@ -20,26 +20,26 @@ if host_machine.cpu_family().startswith('x86')
     add_project_arguments('-DEDGEMASKS_X86', language: 'cpp')
 
     libs += static_library('instrset_detect',
-        files('EdgeMasks/vectorclass/instrset_detect.cpp'),
+        files('src/vectorclass/instrset_detect.cpp'),
         gnu_symbol_visibility: 'hidden',
     )
 
     libs += static_library('sse4',
-        files('EdgeMasks/edgemasks_sse4.cpp'),
+        files('src/edgemasks_sse4.cpp'),
         cpp_args: '-march=x86-64-v2',
         gnu_symbol_visibility: 'hidden',
         include_directories: incdir,
     )
 
     libs += static_library('avx2',
-        files('EdgeMasks/edgemasks_avx2.cpp'),
+        files('src/edgemasks_avx2.cpp'),
         cpp_args: '-march=x86-64-v3',
         gnu_symbol_visibility: 'hidden',
         include_directories: incdir,
     )
 
     libs += static_library('avx512',
-        files('EdgeMasks/edgemasks_avx512.cpp'),
+        files('src/edgemasks_avx512.cpp'),
         cpp_args: '-march=x86-64-v4',
         gnu_symbol_visibility: 'hidden',
         include_directories: incdir,
@@ -47,7 +47,7 @@ if host_machine.cpu_family().startswith('x86')
 endif
 
 shared_module('edgemasks',
-    files('EdgeMasks/edgemasks.cpp'),
+    files('src/edgemasks.cpp'),
     gnu_symbol_visibility: 'hidden',
     include_directories: incdir,
     install: true,
