@@ -1,13 +1,13 @@
 /**************************  instrset_detect.cpp   ****************************
 * Author:        Agner Fog
 * Date created:  2012-05-30
-* Last modified: 2022-07-20
-* Version:       2.02.00
+* Last modified: 2026-09-06
+* Version:       2.02.04
 * Project:       vector class library
 * Description:
 * Functions for checking which instruction sets are supported.
 *
-* (c) Copyright 2012-2022 Agner Fog.
+* (c) Copyright 2012-2026 Agner Fog.
 * Apache License version 2.0 or later.
 ******************************************************************************/
 
@@ -59,6 +59,9 @@ static inline uint64_t xgetbv (int ctr) {
     8  or above = AVX2
     9  or above = AVX512F
    10  or above = AVX512VL, AVX512BW, AVX512DQ
+   11  or above = AVX512VBMI and AVX512VBMI2
+   12  or above = AVX512_FP16
+
 */
 int instrset_detect(void) {
 
@@ -103,6 +106,11 @@ int instrset_detect(void) {
     if ((abcd[1] & (1 << 31)) == 0) return iset;           // no AVX512VL
     if ((abcd[1] & 0x40020000) != 0x40020000) return iset; // no AVX512BW, AVX512DQ
     iset = 10;
+    if ((abcd[2] & (1 << 1)) == 0)  return iset;           // no AVX512VBMI
+    if ((abcd[2] & (1 << 6)) == 0)  return iset;           // no AVX512VBMI2
+    iset = 11;
+    if ((abcd[3] & (1 << 23)) == 0) return iset;           // no AVX512_FP16
+    iset = 12;
     return iset;
 }
 
@@ -128,14 +136,6 @@ bool hasXOP(void) {
     int abcd[4];                                           // cpuid results
     cpuid(abcd, 0x80000001);                               // call cpuid function 0x80000001
     return ((abcd[2] & (1 << 11)) != 0);                   // ecx bit 11 indicates XOP
-}
-
-// detect if CPU supports the AVX512ER instruction set
-bool hasAVX512ER(void) {
-    if (instrset_detect() < 9) return false;               // must have AVX512F
-    int abcd[4];                                           // cpuid results
-    cpuid(abcd, 7);                                        // call cpuid function 7
-    return ((abcd[1] & (1 << 27)) != 0);                   // ebx bit 27 indicates AVX512ER
 }
 
 // detect if CPU supports the AVX512VBMI instruction set
@@ -170,6 +170,15 @@ bool hasAVX512FP16(void) {
     return ((abcd[3] & (1 << 23)) != 0);                   // edx bit 23 indicates AVX512_FP16
 }
 
+// Detect if CPU supports the AVX512ER instruction set.
+// The instruction set AVX512ER providing fast exponential functions is supported
+// only by the obsolete Intel Xeon Phi (Knights Landing & Knights Mill) processors.
+bool hasAVX512ER(void) {
+    if (instrset_detect() < 9) return false;               // must have AVX512F
+    int abcd[4];                                           // cpuid results
+    cpuid(abcd, 7);                                        // call cpuid function 7
+    return ((abcd[1] & (1 << 27)) != 0);                   // ebx bit 27 indicates AVX512ER
+}
 
 #ifdef VCL_NAMESPACE
 }

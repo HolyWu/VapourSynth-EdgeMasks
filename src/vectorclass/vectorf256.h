@@ -81,7 +81,7 @@ protected:
     __m256 ymm; // Float vector
 public:
     // Default constructor:
-    Vec8fb() {}
+    Vec8fb() = default;
     // Constructor to build from all elements:
     Vec8fb(bool b0, bool b1, bool b2, bool b3, bool b4, bool b5, bool b6, bool b7) {
 #if INSTRSET >= 8  // AVX2
@@ -325,7 +325,7 @@ protected:
     __m256d ymm; // double vector
 public:
     // Default constructor:
-    Vec4db() {}
+    Vec4db() = default;
     // Constructor to build from all elements:
     Vec4db(bool b0, bool b1, bool b2, bool b3) {
 #if INSTRSET >= 8  // AVX2
@@ -575,7 +575,7 @@ protected:
     __m256 ymm; // Float vector
 public:
     // Default constructor:
-    Vec8f() {}
+    Vec8f() = default;
     // Constructor to broadcast the same value into all elements:
     Vec8f(float f) {
         ymm = _mm256_set1_ps(f);
@@ -603,31 +603,31 @@ public:
         return ymm;
     }
     // Member function to load from array (unaligned)
-    Vec8f & load(void const * p) {
-        ymm = _mm256_loadu_ps((float const *)p);
+    Vec8f & load(float const * p) {
+        ymm = _mm256_loadu_ps(p);
         return *this;
     }
     // Member function to load from array, aligned by 32
     // You may use load_a instead of load if you are certain that p points to an address divisible by 32
-    Vec8f & load_a(void const * p) {
-        ymm = _mm256_load_ps((float const *)p);
+    Vec8f & load_a(float const * p) {
+        ymm = _mm256_load_ps(p);
         return *this;
     }
     // Member function to store into array (unaligned)
-    void store(void * p) const {
-        _mm256_storeu_ps((float *)p, ymm);
+    void store(float * p) const {
+        _mm256_storeu_ps(p, ymm);
     }
     // Member function storing into array, aligned by 32
     // You may use store_a instead of store if you are certain that p points to an address divisible by 32
-    void store_a(void * p) const {
-        _mm256_store_ps((float *)p, ymm);
+    void store_a(float * p) const {
+        _mm256_store_ps(p, ymm);
     }
     // Member function storing to aligned uncached memory (non-temporal store).
     // This may be more efficient than store_a when storing large blocks of memory if it 
     // is unlikely that the data will stay in the cache until it is read again.
     // Note: Will generate runtime error if p is not aligned by 32
-    void store_nt(void * p) const {
-        _mm256_stream_ps((float *)p, ymm);
+    void store_nt(float * p) const {
+        _mm256_stream_ps(p, ymm);
     }
     // Partial load. Load n elements and set the rest to 0
     Vec8f & load_partial(int n, float const * p) {
@@ -1360,14 +1360,6 @@ static inline Vec8f approx_recipr(Vec8f const a) {
 #endif
 }
 
-// Newton-Raphson refined approximate reciprocal (23 bit precision)
-static inline Vec8f rcp_nr(Vec8f const a) {
-    Vec8f nr = _mm256_rcp_ps(a);
-    Vec8f muls = nr * nr * a;
-    Vec8f dbl = nr + nr;
-    return dbl - muls;
-}
-
 // approximate reciprocal squareroot (Faster than 1.f / sqrt(a). Relative accuracy better than 2^-11)
 static inline Vec8f approx_rsqrt(Vec8f const a) {
 // use more accurate version if available. (none of these will raise exceptions on zero)
@@ -1447,7 +1439,7 @@ protected:
     __m256d ymm; // double vector
 public:
     // Default constructor:
-    Vec4d() {}
+    Vec4d() = default;
     // Constructor to broadcast the same value into all elements:
     Vec4d(double d) {
         ymm = _mm256_set1_pd(d);

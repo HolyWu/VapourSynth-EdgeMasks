@@ -93,7 +93,7 @@ protected:
     __m128 xmm; // Float vector
 public:
     // Default constructor:
-    Vec4fb() {}
+    Vec4fb() = default;
     // Constructor to build from all elements:
     Vec4fb(bool b0, bool b1, bool b2, bool b3) {
         xmm = _mm_castsi128_ps(_mm_setr_epi32(-(int)b0, -(int)b1, -(int)b2, -(int)b3));
@@ -296,7 +296,7 @@ protected:
     __m128d xmm; // Double vector
 public:
     // Default constructor:
-    Vec2db() {}
+    Vec2db() = default;
     // Constructor to broadcast scalar value:
     Vec2db(bool b) {
         xmm = _mm_castsi128_pd(_mm_set1_epi32(-int32_t(b)));
@@ -484,7 +484,7 @@ protected:
     __m128 xmm; // Float vector
 public:
     // Default constructor:
-    Vec4f() {}
+    Vec4f() = default;
     // Constructor to broadcast the same value into all elements:
     Vec4f(float f) {
         xmm = _mm_set1_ps(f);
@@ -507,8 +507,8 @@ public:
         return xmm;
     }
     // Member function to load from array (unaligned)
-    Vec4f & load(void const * p) {
-        xmm = _mm_loadu_ps((float const *)p);
+    Vec4f & load(float const * p) {
+        xmm = _mm_loadu_ps(p);
         return *this;
     }
     // Member function to load from array, aligned by 16
@@ -516,28 +516,28 @@ public:
     // Merom, Wolfdale) and Atom, but not on other processors from Intel, AMD or VIA.
     // You may use load_a instead of load if you are certain that p points to an address
     // divisible by 16.
-    Vec4f & load_a(void const * p) {
-        xmm = _mm_load_ps((float const *)p);
+    Vec4f & load_a(float const * p) {
+        xmm = _mm_load_ps(p);
         return *this;
     }
     // Member function to store into array (unaligned)
-    void store(void * p) const {
-        _mm_storeu_ps((float *)p, xmm);
+    void store(float * p) const {
+        _mm_storeu_ps(p, xmm);
     }
     // Member function storing into array, aligned by 16
     // "store_a" is faster than "store" on older Intel processors (Pentium 4, Pentium M, Core 1,
     // Merom, Wolfdale) and Atom, but not on other processors from Intel, AMD or VIA.
     // You may use store_a instead of store if you are certain that p points to an address
     // divisible by 16.
-    void store_a(void * p) const {
-        _mm_store_ps((float *)p, xmm);
+    void store_a(float * p) const {
+        _mm_store_ps(p, xmm);
     }
     // Member function storing to aligned uncached memory (non-temporal store).
     // This may be more efficient than store_a when storing large blocks of memory if it 
     // is unlikely that the data will stay in the cache until it is read again.
     // Note: Will generate runtime error if p is not aligned by 16
-    void store_nt(void * p) const {
-        _mm_stream_ps((float *)p, xmm);
+    void store_nt(float * p) const {
+        _mm_stream_ps(p, xmm);
     }
     // Partial load. Load n elements and set the rest to 0
     Vec4f & load_partial(int n, float const * p) {
@@ -1293,14 +1293,6 @@ static inline Vec4f approx_recipr(Vec4f const a) {
 #endif
 }
 
-// Newton-Raphson refined approximate reciprocal (23 bit precision)
-static inline Vec4f rcp_nr(Vec4f const a) {
-    Vec4f nr = _mm_rcp_ps(a);
-    Vec4f muls = nr * nr * a;
-    Vec4f dbl = nr + nr;
-    return dbl - muls;
-}
-
 // approximate reciprocal squareroot (Faster than 1.f / sqrt(a). Relative accuracy better than 2^-11)
 static inline Vec4f approx_rsqrt(Vec4f const a) {
     // use more accurate version if available. (none of these will raise exceptions on zero)
@@ -1490,7 +1482,7 @@ protected:
     __m128d xmm; // double vector
 public:
     // Default constructor:
-    Vec2d() {}
+    Vec2d() = default;
     // Constructor to broadcast the same value into all elements:
     Vec2d(double d) {
         xmm = _mm_set1_pd(d);

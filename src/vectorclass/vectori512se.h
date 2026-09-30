@@ -1,8 +1,8 @@
 /****************************  vectori512se.h   *******************************
 * Author:        Agner Fog
 * Date created:  2019-04-20
-* Last modified: 2022-07-20
-* Version:       2.02.00
+* Last modified: 2026-09-08
+* Version:       2.02.04
 * Project:       vector class library
 * Description:
 * Header file defining 512-bit integer vector classes for 8 and 16 bit integers.
@@ -22,7 +22,7 @@
 * Each vector object is represented internally in the CPU as two 256-bit registers.
 * This header file defines operators and functions for these vectors.
 *
-* (c) Copyright 2012-2022 Agner Fog.
+* (c) Copyright 2012-2026 Agner Fog.
 * Apache License version 2.0 or later.
 ******************************************************************************/
 
@@ -60,7 +60,7 @@ protected:
     Vec256b z1;          // higher 256 bits
 public:
     // Default constructor:
-    Vec64c() {}
+    Vec64c() = default;
     // Constructor to build from two Vec32c:
     Vec64c(Vec32c const a0, Vec32c const a1) {
         z0 = a0;
@@ -239,7 +239,7 @@ public:
 class Vec64cb : public Vec64c {
 public:
     // Default constructor:
-    Vec64cb() {}
+    Vec64cb() = default;
 
     Vec64cb (Vec64c const a) : Vec64c(a) {}
 
@@ -639,7 +639,7 @@ static inline Vec64c rotate_left(Vec64c const a, int b) {
 class Vec64uc : public Vec64c {
 public:
     // Default constructor:
-    Vec64uc() {}
+    Vec64uc() = default;
     // Construct from Vec64c
     Vec64uc(Vec64c const a) : Vec64c(a) {
     }
@@ -862,7 +862,7 @@ static inline Vec64uc min(Vec64uc const a, Vec64uc const b) {
 class Vec32s : public Vec64c {
 public:
     // Default constructor:
-    Vec32s() {}
+    Vec32s() = default;
     // Constructor to broadcast the same value into all elements:
     Vec32s(int16_t i) {
         z0 = z1 = Vec16s(i);
@@ -1011,7 +1011,7 @@ public:
 class Vec32sb : public Vec32s {
 public:
     // Default constructor:
-    Vec32sb() {}
+    Vec32sb() = default;
     // Constructor to build from all elements: Not implemented
 
     // Constructor to convert from type __mmask32 used in intrinsics: not possible
@@ -1391,7 +1391,7 @@ static inline Vec32s rotate_left(Vec32s const a, int b) {
 class Vec32us : public Vec32s {
 public:
     // Default constructor:
-    Vec32us() {}
+    Vec32us() = default;
     // Construct from Vec32s
     Vec32us(Vec32s const a) {
         z0 = a.get_low();  z1 = a.get_high();
@@ -1748,6 +1748,15 @@ static inline Vec32s lookup128(Vec32s const index, Vec32s const table1, Vec32s c
     table1.store(table);  table2.store(table+32);  table3.store(table+64);  table4.store(table+96);
     for (int i=0; i<32; i++) result[i] = table[index[i] & 127];
     return Vec32s().load(result);
+}
+
+// lookup in array table
+// (no reason to make a version for AVX512F without AVX512BW, because this combination is extermely rare)
+template <int n>
+static inline Vec32s lookup(Vec32s const index, void const * table) {
+    Vec16s r1 = lookup<n>(index.get_low(), table);
+    Vec16s r2 = lookup<n>(index.get_high(), table);
+    return Vec32s(r1, r2);
 }
 
 

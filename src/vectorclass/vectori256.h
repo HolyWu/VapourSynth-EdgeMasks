@@ -1,8 +1,8 @@
 /****************************  vectori256.h   *******************************
 * Author:        Agner Fog
 * Date created:  2012-05-30
-* Last modified: 2023-07-04
-* Version:       2.02.02
+* Last modified: 2026-09-09
+* Version:       2.02.04
 * Project:       vector class library
 * Description:
 * Header file defining integer vector classes as interface to intrinsic
@@ -28,7 +28,7 @@
 * Each vector object is represented internally in the CPU as a 256-bit register.
 * This header file defines operators and functions for these vectors.
 *
-* (c) Copyright 2012-2023 Agner Fog.
+* (c) Copyright 2012-2026 Agner Fog.
 * Apache License version 2.0 or later.
 *****************************************************************************/
 
@@ -84,7 +84,7 @@ protected:
     __mmask32  mm; // Boolean mask register
 public:
     // Default constructor:
-    Vec32b() {}
+    Vec32b() = default;
     // Constructor to convert from type __mmask32 used in intrinsics
     // Made explicit to prevent implicit conversion from int
     Vec32b(__mmask32 x) {
@@ -177,7 +177,7 @@ protected:
     __m256i ymm; // Integer vector
 public:
     // Default constructor:
-    Vec256b() {}
+    Vec256b() = default;
 
     // Constructor to broadcast the same value into all elements
     // Removed because of undesired implicit conversions:
@@ -336,7 +336,7 @@ static inline bool horizontal_or (Vec256b const a) {
 class Vec32c : public Vec256b {
 public:
     // Default constructor:
-    Vec32c() {}
+    Vec32c() = default;
     // Constructor to broadcast the same value into all elements:
     Vec32c(int i) {
         ymm = _mm256_set1_epi8((char)i);
@@ -489,7 +489,7 @@ public:
 class Vec32cb : public Vec32c {
 public:
     // Default constructor:
-    Vec32cb() {}
+    Vec32cb() = default;
     // Constructor to build from all elements:
     /*
     Vec32cb(bool x0, bool x1, bool x2, bool x3, bool x4, bool x5, bool x6, bool x7,
@@ -1038,7 +1038,7 @@ static inline Vec32c rotate_left(Vec32c const a, int b) {
 class Vec32uc : public Vec32c {
 public:
     // Default constructor:
-    Vec32uc() {}
+    Vec32uc() = default;
     // Constructor to broadcast the same value into all elements:
     Vec32uc(uint32_t i) {
         ymm = _mm256_set1_epi8((char)i);
@@ -1300,7 +1300,7 @@ static inline Vec32uc min(Vec32uc const a, Vec32uc const b) {
 class Vec16s : public Vec256b {
 public:
     // Default constructor:
-    Vec16s() {}
+    Vec16s() = default;
     // Constructor to broadcast the same value into all elements:
     Vec16s(int i) {
         ymm = _mm256_set1_epi16((int16_t)i);
@@ -1450,7 +1450,7 @@ public:
 class Vec16sb : public Vec16s {
 public:
     // Default constructor:
-    Vec16sb() {}
+    Vec16sb() = default;
     // Constructor to build from all elements:
     /*
     Vec16sb(bool x0, bool x1, bool x2, bool x3, bool x4, bool x5, bool x6, bool x7,
@@ -1903,7 +1903,7 @@ static inline Vec16s rotate_left(Vec16s const a, int b) {
 class Vec16us : public Vec16s {
 public:
     // Default constructor:
-    Vec16us() {}
+    Vec16us() = default;
     // Constructor to broadcast the same value into all elements:
     Vec16us(uint32_t i) {
         ymm = _mm256_set1_epi16((int16_t)i);
@@ -2163,7 +2163,7 @@ static inline Vec16us min(Vec16us const a, Vec16us const b) {
 class Vec8i : public Vec256b {
 public:
     // Default constructor:
-    Vec8i() {}
+    Vec8i() = default;
     // Constructor to broadcast the same value into all elements:
     Vec8i(int i) {
         ymm = _mm256_set1_epi32(i);
@@ -2313,7 +2313,7 @@ public:
 class Vec8ib : public Vec8i {
 public:
     // Default constructor:
-    Vec8ib() {}
+    Vec8ib() = default;
     // Constructor to build from all elements:
     Vec8ib(bool x0, bool x1, bool x2, bool x3, bool x4, bool x5, bool x6, bool x7) :
         Vec8i(-int32_t(x0), -int32_t(x1), -int32_t(x2), -int32_t(x3), -int32_t(x4), -int32_t(x5), -int32_t(x6), -int32_t(x7))
@@ -2768,7 +2768,7 @@ static inline Vec8i rotate_left(Vec8i const a, int b) {
 class Vec8ui : public Vec8i {
 public:
     // Default constructor:
-    Vec8ui() {}
+    Vec8ui() = default;
     // Constructor to broadcast the same value into all elements:
     Vec8ui(uint32_t i) {
         ymm = _mm256_set1_epi32((int32_t)i);
@@ -3029,7 +3029,7 @@ static inline Vec8ui min(Vec8ui const a, Vec8ui const b) {
 class Vec4q : public Vec256b {
 public:
     // Default constructor:
-    Vec4q() {}
+    Vec4q() = default;
     // Constructor to broadcast the same value into all elements:
     Vec4q(int64_t i) {
         ymm = _mm256_set1_epi64x(i);
@@ -3175,7 +3175,7 @@ public:
 class Vec4qb : public Vec4q {
 public:
     // Default constructor:
-    Vec4qb() {}
+    Vec4qb() = default;
     // Constructor to build from all elements:
     Vec4qb(bool x0, bool x1, bool x2, bool x3) :
         Vec4q(-int64_t(x0), -int64_t(x1), -int64_t(x2), -int64_t(x3)) {
@@ -3635,7 +3635,7 @@ static inline Vec4q rotate_left(Vec4q const a, int b) {
 class Vec4uq : public Vec4q {
 public:
     // Default constructor:
-    Vec4uq() {}
+    Vec4uq() = default;
     // Constructor to broadcast the same value into all elements:
     Vec4uq(uint64_t i) {
         ymm = Vec4q((int64_t)i);
@@ -5869,14 +5869,13 @@ static inline uint16_t to_bits(Vec16sb const x) {
 }
 
 static inline uint8_t to_bits(Vec8ib const x) {
-    __m128i a = _mm_packs_epi32(x.get_low(), x.get_high());  // 32-bit dwords to 16-bit words
-    __m128i b = _mm_packs_epi16(a, a);  // 16-bit words to bytes
-    return (uint8_t)_mm_movemask_epi8(b);
+    int r = _mm256_movemask_ps(_mm256_castsi256_ps(x));
+    return r;
 }
 
 static inline uint8_t to_bits(Vec4qb const x) {
-    uint32_t a = (uint32_t)_mm256_movemask_epi8(x);
-    return ((a & 1) | ((a >> 7) & 2)) | (((a >> 14) & 4) | ((a >> 21) & 8));
+    int r = _mm256_movemask_pd(_mm256_castsi256_pd(x));
+    return r;
 }
 
 #endif

@@ -1,8 +1,8 @@
 /****************************  vectorfp16.h   *******************************
 * Author:        Agner Fog
 * Date created:  2022-05-03
-* Last modified: 2023-11-07
-* Version:       2.02.02
+* Last modified: 2026-09-08
+* Version:       2.02.04
 * Project:       vector class library
 * Description:
 * Header file defining half precision floating point vector classes
@@ -23,7 +23,7 @@
 * g++ version 12.1 with binutils version 2.34
 * Intel c++ compiler version 2022.0
 *
-* (c) Copyright 2012-2023 Agner Fog.
+* (c) Copyright 2012-2026 Agner Fog.
 * Apache License version 2.0 or later.
 *****************************************************************************/
 
@@ -42,6 +42,8 @@
 // half precision instructions not supported. Use emulation
 #include "vectorfp16e.h"
 #else
+
+#include <stdfloat>  // define std::float16_t
 
 #ifdef VCL_NAMESPACE
 namespace VCL_NAMESPACE {
@@ -75,10 +77,13 @@ protected:
     __m128h xmm; // Float vector
 public:
     // Default constructor:
-    Vec8h() {}
+    Vec8h() = default;
     // Constructor to broadcast the same value into all elements:
     Vec8h(_Float16 f) {
         xmm = _mm_set1_ph (f);
+    }
+    Vec8h(float f) {
+        xmm = _mm_set1_ph (_Float16(f));
     }
     // Constructor to build from all elements:
     Vec8h(_Float16 f0, _Float16 f1, _Float16 f2, _Float16 f3, _Float16 f4, _Float16 f5, _Float16 f6, _Float16 f7) {
@@ -368,7 +373,7 @@ static inline Vec8h & operator ^= (Vec8h & a, Vec8h const b) {
 
 // vector operator ! : logical not. Returns Boolean vector
 static inline Vec8hb operator ! (Vec8h const a) {
-    return a == Vec8h(0.0);
+    return a == Vec8h(0.0f);
 }
 
 
@@ -790,7 +795,7 @@ static inline Vec8h lookup16(Vec8s const index, Vec8h const table0, Vec8h const 
 }
 
 template <int n>
-static inline Vec8h lookup(Vec8s const index, void const * table) {
+static inline Vec8h lookup(Vec8s const index, Float16 const * table) {
     return _mm_castsi128_ph(lookup<n>(index, (void const *)(table)));
 }
 
@@ -824,11 +829,14 @@ protected:
     __m256h ymm; // Float vector
 public:
     // Default constructor:
-    Vec16h() {}
+    Vec16h() = default;
     // Constructor to broadcast the same value into all elements:
     Vec16h(_Float16 f) {
         ymm = _mm256_set1_ph (f);
     }
+    Vec16h(float f) {
+        ymm = _mm256_set1_ph (_Float16(f));    }
+
     // Constructor to build from all elements:
     Vec16h(_Float16 f0, _Float16 f1, _Float16 f2, _Float16 f3, _Float16 f4, _Float16 f5, _Float16 f6, _Float16 f7,
     _Float16 f8, _Float16 f9, _Float16 f10, _Float16 f11, _Float16 f12, _Float16 f13, _Float16 f14, _Float16 f15) {
@@ -905,17 +913,17 @@ public:
 #if INSTRSET >= 10 && defined (__AVX512VBMI2__)
         __m256i x = _mm256_maskz_compress_epi16(__mmask16(1u << index), _mm256_castph_si256(ymm));
         return _mm256_cvtsh_h(_mm256_castsi256_ph(x));
-#elif 0
+#else
         union {
             __m256h v;
             _Float16 f[16];
         } y;
         y.v = ymm;
         return y.f[index & 15];
-#else
+        /* requires AVX512VL
         Vec8ui x = _mm256_maskz_compress_epi32(__mmask16(1u << (index >> 1)), _mm256_castph_si256(ymm));  // extract int32_t
         x >>= uint32_t((index & 1) << 4);  // get upper 16 bits if index odd
-        return _mm256_cvtsh_h(_mm256_castsi256_ph(x));
+        return _mm256_cvtsh_h(_mm256_castsi256_ph(x));*/
 #endif
     }
     // Extract a single element. Use store function if extracting more than one element.
@@ -1128,7 +1136,7 @@ static inline Vec16h & operator ^= (Vec16h & a, Vec16h const b) {
 
 // vector operator ! : logical not. Returns Boolean vector
 static inline Vec16hb operator ! (Vec16h const a) {
-    return a == Vec16h(0.0);
+    return a == Vec16h(0.0f);
 }
 
 
@@ -1539,7 +1547,7 @@ static inline Vec16h lookup16 (Vec16s const index, Vec16h const table) {
 }
 
 template <int n>
-Vec16h lookup(Vec16s const index, void const * table) {
+Vec16h lookup(Vec16s const index, Float16 const * table) {
     return _mm256_castsi256_ph(lookup<n>(index, (void const *)(table)));
 }
 
@@ -1577,10 +1585,13 @@ protected:
     __m512h zmm; // Float vector
 public:
     // Default constructor:
-    Vec32h() {}
+    Vec32h() = default;
     // Constructor to broadcast the same value into all elements:
     Vec32h(_Float16 f) {
         zmm = _mm512_set1_ph (f);
+    }
+    Vec32h(float f) {
+        zmm = _mm512_set1_ph (_Float16(f));
     }
     // Constructor to build from all elements:
     Vec32h(_Float16 f0, _Float16 f1, _Float16 f2, _Float16 f3, _Float16 f4, _Float16 f5, _Float16 f6, _Float16 f7,
@@ -1884,7 +1895,7 @@ static inline Vec32h & operator ^= (Vec32h & a, Vec32h const b) {
 
 // vector operator ! : logical not. Returns Boolean vector
 static inline Vec32hb operator ! (Vec32h const a) {
-    return a == Vec32h(0.0);
+    return a == Vec32h(0.0f);
 }
 
 
@@ -2288,13 +2299,12 @@ Vec32h blend32(Vec32h const a, Vec32h const b) {
 * The table is given as one or more vectors or as an array.
 *
 *****************************************************************************/
-
 static inline Vec32h lookup32 (Vec32s const index, Vec32h const table) {
     return _mm512_castsi512_ph(lookup32(index, Vec32s(_mm512_castph_si512(table))));
 }
 
 template <int n>
-static inline Vec32h lookup(Vec32s const index, void const * table) {
+static inline Vec32h lookup(Vec32s const index, Float16 const * table) {
     return _mm512_castsi512_ph(lookup<n>(index, (void const *)(table)));
 }
 
@@ -2389,7 +2399,7 @@ VTYPE exp_h(VTYPE const initial_x) {
         x = x * ln2;
     }
     else if constexpr (BA == 10) {               // pow(10,x)
-        max_x = 4.667f;
+        max_x = _Float16(4.667f);
         const _Float16 log10_2 = _Float16(0.30102999566f); // log10(2)
         x = initial_x;
         r = round(initial_x*_Float16(3.32192809489f)); // VM_LOG2E*VM_LN10
@@ -2476,11 +2486,11 @@ VTYPE sincos_h(VTYPE * cosret, VTYPE const xx) {
 
     // Find quadrant
     if constexpr ((SC & 8) != 0) {               // sinpi
-        xa = select(xa > VTYPE(32000.f), VTYPE(0.f), xa); // avoid overflow when multiplying by 2
-        y = round(xa * VTYPE(2.0f)); 
+        xa = select(xa > VTYPE(_Float16(32000.f)), VTYPE(_Float16(0.f)), xa); // avoid overflow when multiplying by 2
+        y = round(xa * VTYPE(_Float16(2.0f))); 
     }
     else {                                       // sin
-        xa = select(xa > VTYPE(314.25f), VTYPE(0.f), xa); // avoid meaningless results for high x
+        xa = select(xa > VTYPE(_Float16(314.25f)), VTYPE(_Float16(0.f)), xa); // avoid meaningless results for high x
         y = round(xa * c2_pi);                   // quadrant, as float
     }
 
@@ -2493,7 +2503,7 @@ VTYPE sincos_h(VTYPE * cosret, VTYPE const xx) {
 
     if constexpr ((SC & 8) != 0) {               // sinpi
         // modulo 2: subtract 0.5*y
-        x = nmul_add(y, VTYPE(0.5f), xa) * VTYPE(pi);
+        x = nmul_add(y, VTYPE(_Float16(0.5f)), xa) * VTYPE(_Float16(pi));
     }
     else {                                       // sin
         // Reduce by extended precision modular arithmetic    
@@ -2533,7 +2543,7 @@ VTYPE sincos_h(VTYPE * cosret, VTYPE const xx) {
     else {                                       // (SC & 7) == 4. tan
         if constexpr (SC == 12) {
             // tanpi can give INF result, tan cannot. Get the right sign of INF result according to IEEE 754-2019
-            cos1 = select(cos1 == VTYPE(0.f), VTYPE(0.f), cos1); // remove sign of 0
+            cos1 = select(cos1 == VTYPE(_Float16(0.f)), VTYPE(_Float16(0.f)), cos1); // remove sign of 0
             // the sign of zero output is arbitrary. fixing it would be a waste of code
         }
         return sin1 / cos1;
