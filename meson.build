@@ -2,7 +2,7 @@ project('EdgeMasks', 'cpp',
     default_options: ['buildtype=release', 'warning_level=2', 'b_lto=true', 'b_ndebug=if-release', 'cpp_std=c++17'],
     license: 'MIT',
     license_files: 'LICENSE',
-    meson_version: '>=1.2.3',
+    meson_version: '>=1.6.0',
     version: '4.1',
 )
 
