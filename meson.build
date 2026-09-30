@@ -1,5 +1,5 @@
 project('EdgeMasks', 'cpp',
-    default_options: ['buildtype=release', 'warning_level=2', 'b_lto=true', 'b_ndebug=if-release', 'cpp_std=c++17'],
+    default_options: ['buildtype=release', 'b_lto=true', 'b_ndebug=if-release', 'cpp_std=c++20'],
     license: 'Apache-2.0 AND MIT',
     license_files: ['src/vectorclass/LICENSE', 'LICENSE'],
     meson_version: '>=1.6.0',
