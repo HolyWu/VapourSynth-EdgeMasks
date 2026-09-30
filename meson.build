@@ -16,7 +16,7 @@ libs = []
 
 add_project_arguments('-DVS_USE_API_42', language: 'cpp')
 
-if host_machine.cpu_family().startswith('x86')
+if host_machine.cpu_family() == 'x86_64'
     add_project_arguments('-DEDGEMASKS_X86', language: 'cpp')
 
     libs += static_library('instrset_detect',
