@@ -16,7 +16,8 @@ struct EdgeMasksData final {
     const VSVideoInfo* vi;
     bool process[3];
     float scale[3];
-    int matrix, peak;
+    int matrix;
+    float peak;
     std::string filterName;
     void (*filter)(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
 };

@@ -17,13 +17,13 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
             return vector_t().load(srcp);
     };
 
-    auto store = [&](const vector_t& srcp, pixel_t* dstp) noexcept {
+    auto store = [](const vector_t& srcp, pixel_t* dstp) noexcept {
         if constexpr (std::is_same_v<pixel_t, uint8_t>) {
             const auto result = compress_saturated_s2u(compress_saturated(srcp, zero_si512()), zero_si512()).get_low().get_low();
             result.store(dstp);
         } else if constexpr (std::is_same_v<pixel_t, uint16_t>) {
             const auto result = compress_saturated_s2u(srcp, zero_si512()).get_low();
-            min(result, d->peak).store(dstp);
+            result.store(dstp);
         } else {
             srcp.store(dstp);
         }
@@ -153,7 +153,7 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                 gF *= d->scale[plane];
 
                 if constexpr (std::is_integral_v<pixel_t>)
-                    return truncatei(gF + 0.5f);
+                    return truncatei(min(gF + 0.5f, d->peak));
                 else
                     return gF;
             };

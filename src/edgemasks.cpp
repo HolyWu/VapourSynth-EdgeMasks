@@ -148,7 +148,7 @@ static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RE
                 g *= d->scale[plane];
 
                 if constexpr (std::is_integral_v<pixel_t>)
-                    return std::min(static_cast<int>(g + 0.5f), d->peak);
+                    return static_cast<int>(std::min(g + 0.5f, d->peak));
                 else
                     return g;
             };
