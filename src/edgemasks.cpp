@@ -432,8 +432,8 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
                 else
                     d->scale[plane] = d->scale[plane - 1];
             } else {
-                if (d->scale[plane] <= 0.0f)
-                    throw "scale must be greater than 0.0"s;
+                if (!std::isfinite(d->scale[plane]) || d->scale[plane] <= 0.0f)
+                    throw "scale must be finite and greater than 0.0"s;
             }
         }
 
