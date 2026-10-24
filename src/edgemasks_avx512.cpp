@@ -1,5 +1,7 @@
 #ifdef EDGEMASKS_X86
 #define INSTRSET 10
+#include <algorithm>
+
 #include "edgemasks.h"
 
 template<typename pixel_t, int Operator, bool euclidean>
@@ -42,6 +44,10 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
             vector_t a40, a41, a42, a43, a44;
 
             const int regularPart = (width - 1) & ~(vector_t().size() - 1);
+            // When width % N == 1, the tail also rewrites column width - 2, which the previous vector computes from padding for 5x5.
+            const int tailStart = std::min(regularPart, width - 2);
+            const auto isLast = vector_t(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15) == vector_t(width - 1 - tailStart);
+            const auto isSecondLast = vector_t(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15) == vector_t(width - 2 - tailStart);
 
             auto detect = [&]() noexcept {
                 vector_t gx, gy, g;
@@ -170,9 +176,9 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                         a12 = load(srcp0 + 1);
                         a22 = load(next1 + 1);
                     } else {
-                        a02 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a01);
-                        a12 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a11);
-                        a22 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a21);
+                        a02 = select(isLast, a00, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a01));
+                        a12 = select(isLast, a10, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a11));
+                        a22 = select(isLast, a20, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a21));
                     }
 
                     store(detect(), dstp);
@@ -186,15 +192,15 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                     }
 
                     if (regularPart >= vector_t().size()) {
-                        a00 = load(prev1 + regularPart - 1); a01 = load(prev1 + regularPart);
-                        a10 = load(srcp0 + regularPart - 1); a11 = load(srcp0 + regularPart);
-                        a20 = load(next1 + regularPart - 1); a21 = load(next1 + regularPart);
+                        a00 = load(prev1 + tailStart - 1); a01 = load(prev1 + tailStart);
+                        a10 = load(srcp0 + tailStart - 1); a11 = load(srcp0 + tailStart);
+                        a20 = load(next1 + tailStart - 1); a21 = load(next1 + tailStart);
 
-                        a02 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a01);
-                        a12 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a11);
-                        a22 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a21);
+                        a02 = select(isLast, a00, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a01));
+                        a12 = select(isLast, a10, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a11));
+                        a22 = select(isLast, a20, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a21));
 
-                        store(detect(), dstp + regularPart);
+                        store(detect(), dstp + tailStart);
                     }
                 } else {
                     auto prev2 = (y == 0) ? srcp0 + stride * 2 : (y == 1 ? srcp0 : srcp0 - stride * 2);
@@ -225,17 +231,17 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                         a33 = load(next1 + 1); a34 = load(next1 + 2);
                         a43 = load(next2 + 1); a44 = load(next2 + 2);
                     } else {
-                        a03 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a02);
-                        a13 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a12);
-                        a23 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a22);
-                        a33 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a32);
-                        a43 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a42);
+                        a03 = select(isLast, a01, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a02));
+                        a13 = select(isLast, a11, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a12));
+                        a23 = select(isLast, a21, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a22));
+                        a33 = select(isLast, a31, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a32));
+                        a43 = select(isLast, a41, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a42));
 
-                        a04 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a02);
-                        a14 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a12);
-                        a24 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a22);
-                        a34 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a32);
-                        a44 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a42);
+                        a04 = select(isLast, a00, select(isSecondLast, a02, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a02)));
+                        a14 = select(isLast, a10, select(isSecondLast, a12, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a12)));
+                        a24 = select(isLast, a20, select(isSecondLast, a22, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a22)));
+                        a34 = select(isLast, a30, select(isSecondLast, a32, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a32)));
+                        a44 = select(isLast, a40, select(isSecondLast, a42, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a42)));
                     }
 
                     store(detect(), dstp);
@@ -251,25 +257,25 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
                     }
 
                     if (regularPart >= vector_t().size()) {
-                        a00 = load(prev2 + regularPart - 2); a01 = load(prev2 + regularPart - 1); a02 = load(prev2 + regularPart);
-                        a10 = load(prev1 + regularPart - 2); a11 = load(prev1 + regularPart - 1); a12 = load(prev1 + regularPart);
-                        a20 = load(srcp0 + regularPart - 2); a21 = load(srcp0 + regularPart - 1); a22 = load(srcp0 + regularPart);
-                        a30 = load(next1 + regularPart - 2); a31 = load(next1 + regularPart - 1); a32 = load(next1 + regularPart);
-                        a40 = load(next2 + regularPart - 2); a41 = load(next2 + regularPart - 1); a42 = load(next2 + regularPart);
+                        a00 = load(prev2 + tailStart - 2); a01 = load(prev2 + tailStart - 1); a02 = load(prev2 + tailStart);
+                        a10 = load(prev1 + tailStart - 2); a11 = load(prev1 + tailStart - 1); a12 = load(prev1 + tailStart);
+                        a20 = load(srcp0 + tailStart - 2); a21 = load(srcp0 + tailStart - 1); a22 = load(srcp0 + tailStart);
+                        a30 = load(next1 + tailStart - 2); a31 = load(next1 + tailStart - 1); a32 = load(next1 + tailStart);
+                        a40 = load(next2 + tailStart - 2); a41 = load(next2 + tailStart - 1); a42 = load(next2 + tailStart);
 
-                        a03 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a02);
-                        a13 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a12);
-                        a23 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a22);
-                        a33 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a32);
-                        a43 = permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a42);
+                        a03 = select(isLast, a01, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a02));
+                        a13 = select(isLast, a11, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a12));
+                        a23 = select(isLast, a21, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a22));
+                        a33 = select(isLast, a31, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a32));
+                        a43 = select(isLast, a41, permute16<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14>(a42));
 
-                        a04 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a02);
-                        a14 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a12);
-                        a24 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a22);
-                        a34 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a32);
-                        a44 = permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a42);
+                        a04 = select(isLast, a00, select(isSecondLast, a02, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a02)));
+                        a14 = select(isLast, a10, select(isSecondLast, a12, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a12)));
+                        a24 = select(isLast, a20, select(isSecondLast, a22, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a22)));
+                        a34 = select(isLast, a30, select(isSecondLast, a32, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a32)));
+                        a44 = select(isLast, a40, select(isSecondLast, a42, permute16<2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13>(a42)));
 
-                        store(detect(), dstp + regularPart);
+                        store(detect(), dstp + tailStart);
                     }
                 }
 

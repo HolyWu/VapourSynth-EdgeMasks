@@ -1,5 +1,7 @@
 #ifdef EDGEMASKS_X86
 #define INSTRSET 6
+#include <algorithm>
+
 #include "edgemasks.h"
 
 template<typename pixel_t, int Operator, bool euclidean>
@@ -42,6 +44,10 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
             vector_t a40, a41, a42, a43, a44;
 
             const int regularPart = (width - 1) & ~(vector_t().size() - 1);
+            // When width % N == 1, the tail also rewrites column width - 2, which the previous vector computes from padding for 5x5.
+            const int tailStart = std::min(regularPart, width - 2);
+            const auto isLast = vector_t(0, 1, 2, 3) == vector_t(width - 1 - tailStart);
+            const auto isSecondLast = vector_t(0, 1, 2, 3) == vector_t(width - 2 - tailStart);
 
             auto detect = [&]() noexcept {
                 vector_t gx, gy, g;
@@ -170,9 +176,9 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
                         a12 = load(srcp0 + 1);
                         a22 = load(next1 + 1);
                     } else {
-                        a02 = permute4<1, 2, 3, 2>(a01);
-                        a12 = permute4<1, 2, 3, 2>(a11);
-                        a22 = permute4<1, 2, 3, 2>(a21);
+                        a02 = select(isLast, a00, permute4<1, 2, 3, 2>(a01));
+                        a12 = select(isLast, a10, permute4<1, 2, 3, 2>(a11));
+                        a22 = select(isLast, a20, permute4<1, 2, 3, 2>(a21));
                     }
 
                     store(detect(), dstp);
@@ -186,11 +192,11 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
                     }
 
                     if (regularPart >= vector_t().size()) {
-                        a00 = load(prev1 + regularPart - 1); a01 = load(prev1 + regularPart); a02 = permute4<1, 2, 3, 2>(a01);
-                        a10 = load(srcp0 + regularPart - 1); a11 = load(srcp0 + regularPart); a12 = permute4<1, 2, 3, 2>(a11);
-                        a20 = load(next1 + regularPart - 1); a21 = load(next1 + regularPart); a22 = permute4<1, 2, 3, 2>(a21);
+                        a00 = load(prev1 + tailStart - 1); a01 = load(prev1 + tailStart); a02 = select(isLast, a00, permute4<1, 2, 3, 2>(a01));
+                        a10 = load(srcp0 + tailStart - 1); a11 = load(srcp0 + tailStart); a12 = select(isLast, a10, permute4<1, 2, 3, 2>(a11));
+                        a20 = load(next1 + tailStart - 1); a21 = load(next1 + tailStart); a22 = select(isLast, a20, permute4<1, 2, 3, 2>(a21));
 
-                        store(detect(), dstp + regularPart);
+                        store(detect(), dstp + tailStart);
                     }
                 } else {
                     auto prev2 = (y == 0) ? srcp0 + stride * 2 : (y == 1 ? srcp0 : srcp0 - stride * 2);
@@ -235,19 +241,19 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
                     }
 
                     if (regularPart >= vector_t().size()) {
-                        a00 = load(prev2 + regularPart - 2); a01 = load(prev2 + regularPart - 1); a02 = load(prev2 + regularPart);
-                        a10 = load(prev1 + regularPart - 2); a11 = load(prev1 + regularPart - 1); a12 = load(prev1 + regularPart);
-                        a20 = load(srcp0 + regularPart - 2); a21 = load(srcp0 + regularPart - 1); a22 = load(srcp0 + regularPart);
-                        a30 = load(next1 + regularPart - 2); a31 = load(next1 + regularPart - 1); a32 = load(next1 + regularPart);
-                        a40 = load(next2 + regularPart - 2); a41 = load(next2 + regularPart - 1); a42 = load(next2 + regularPart);
+                        a00 = load(prev2 + tailStart - 2); a01 = load(prev2 + tailStart - 1); a02 = load(prev2 + tailStart);
+                        a10 = load(prev1 + tailStart - 2); a11 = load(prev1 + tailStart - 1); a12 = load(prev1 + tailStart);
+                        a20 = load(srcp0 + tailStart - 2); a21 = load(srcp0 + tailStart - 1); a22 = load(srcp0 + tailStart);
+                        a30 = load(next1 + tailStart - 2); a31 = load(next1 + tailStart - 1); a32 = load(next1 + tailStart);
+                        a40 = load(next2 + tailStart - 2); a41 = load(next2 + tailStart - 1); a42 = load(next2 + tailStart);
 
-                        a03 = permute4<1, 2, 3, 2>(a02); a04 = permute4<2, 3, 2, 1>(a02);
-                        a13 = permute4<1, 2, 3, 2>(a12); a14 = permute4<2, 3, 2, 1>(a12);
-                        a23 = permute4<1, 2, 3, 2>(a22); a24 = permute4<2, 3, 2, 1>(a22);
-                        a33 = permute4<1, 2, 3, 2>(a32); a34 = permute4<2, 3, 2, 1>(a32);
-                        a43 = permute4<1, 2, 3, 2>(a42); a44 = permute4<2, 3, 2, 1>(a42);
+                        a03 = select(isLast, a01, permute4<1, 2, 3, 2>(a02)); a04 = select(isLast, a00, select(isSecondLast, a02, permute4<2, 3, 2, 1>(a02)));
+                        a13 = select(isLast, a11, permute4<1, 2, 3, 2>(a12)); a14 = select(isLast, a10, select(isSecondLast, a12, permute4<2, 3, 2, 1>(a12)));
+                        a23 = select(isLast, a21, permute4<1, 2, 3, 2>(a22)); a24 = select(isLast, a20, select(isSecondLast, a22, permute4<2, 3, 2, 1>(a22)));
+                        a33 = select(isLast, a31, permute4<1, 2, 3, 2>(a32)); a34 = select(isLast, a30, select(isSecondLast, a32, permute4<2, 3, 2, 1>(a32)));
+                        a43 = select(isLast, a41, permute4<1, 2, 3, 2>(a42)); a44 = select(isLast, a40, select(isSecondLast, a42, permute4<2, 3, 2, 1>(a42)));
 
-                        store(detect(), dstp + regularPart);
+                        store(detect(), dstp + tailStart);
                     }
                 }
 
