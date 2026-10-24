@@ -1,8 +1,11 @@
 #ifdef EDGEMASKS_X86
 #define INSTRSET 8
+#define VCL_NAMESPACE vcl_avx2
 #include <algorithm>
 
 #include "edgemasks.h"
+
+using namespace VCL_NAMESPACE;
 
 template<typename pixel_t, int Operator, bool euclidean>
 void filterAVX2(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept {

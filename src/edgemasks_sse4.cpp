@@ -1,8 +1,11 @@
 #ifdef EDGEMASKS_X86
 #define INSTRSET 6
+#define VCL_NAMESPACE vcl_sse4
 #include <algorithm>
 
 #include "edgemasks.h"
+
+using namespace VCL_NAMESPACE;
 
 template<typename pixel_t, int Operator, bool euclidean>
 void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept {
