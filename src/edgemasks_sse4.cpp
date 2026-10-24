@@ -23,7 +23,7 @@ void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
             const auto result = compress_saturated_s2u(srcp, zero_si128());
             min(result, d->peak).storel(dstp);
         } else {
-            srcp.store_nt(dstp);
+            srcp.store(dstp);
         }
     };
 

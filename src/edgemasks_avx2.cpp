@@ -21,9 +21,9 @@ void filterAVX2(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRI
             result.storel(dstp);
         } else if constexpr (std::is_same_v<pixel_t, uint16_t>) {
             const auto result = compress_saturated_s2u(srcp, zero_si256()).get_low();
-            min(result, d->peak).store_nt(dstp);
+            min(result, d->peak).store(dstp);
         } else {
-            srcp.store_nt(dstp);
+            srcp.store(dstp);
         }
     };
 

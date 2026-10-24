@@ -18,12 +18,12 @@ void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_REST
     auto store = [&](const vector_t& srcp, pixel_t* dstp) noexcept {
         if constexpr (std::is_same_v<pixel_t, uint8_t>) {
             const auto result = compress_saturated_s2u(compress_saturated(srcp, zero_si512()), zero_si512()).get_low().get_low();
-            result.store_nt(dstp);
+            result.store(dstp);
         } else if constexpr (std::is_same_v<pixel_t, uint16_t>) {
             const auto result = compress_saturated_s2u(srcp, zero_si512()).get_low();
-            min(result, d->peak).store_nt(dstp);
+            min(result, d->peak).store(dstp);
         } else {
-            srcp.store_nt(dstp);
+            srcp.store(dstp);
         }
     };
 
