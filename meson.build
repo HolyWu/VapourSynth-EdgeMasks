@@ -20,6 +20,8 @@ add_project_arguments(
     '-DEDGEMASKS_VERSION_MAJOR=@0@'.format(version[0].to_int()),
     '-DEDGEMASKS_VERSION_MINOR=@0@'.format(version.get(1, '0').to_int()),
     '-DVS_USE_API_42',
+    '-fno-math-errno',
+    '-fno-trapping-math',
     language: 'cpp',
 )
 
