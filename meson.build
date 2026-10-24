@@ -14,7 +14,14 @@ incdir = include_directories(
 
 libs = []
 
-add_project_arguments('-DVS_USE_API_42', language: 'cpp')
+version = meson.project_version().split('.')
+
+add_project_arguments(
+    '-DEDGEMASKS_VERSION_MAJOR=@0@'.format(version[0].to_int()),
+    '-DEDGEMASKS_VERSION_MINOR=@0@'.format(version.get(1, '0').to_int()),
+    '-DVS_USE_API_42',
+    language: 'cpp',
+)
 
 if host_machine.cpu_family() == 'x86_64'
     add_project_arguments('-DEDGEMASKS_X86', language: 'cpp')
