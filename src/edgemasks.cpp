@@ -401,7 +401,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
         if (!vsh::isConstantVideoFormat(d->vi) ||
             (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) ||
             (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
-            throw "only constant format 8-16 bit integer and 32 bit float input supported"s;
+            throw "only 8-16 bit integer and 32 bit float with constant format and dimensions supported"s;
 
         const int m = vsapi->mapNumElements(in, "planes");
 
