@@ -22,507 +22,330 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include <cmath>
-
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <functional>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <utility>
 
-#include "edgemasks.h"
-
-using namespace std::string_literals;
+#include <VapourSynth4.h>
+#include <VSConstants4.h>
+#include <VSHelper4.h>
 
 #ifdef EDGEMASKS_X86
-template<typename pixel_t, int Operator, bool euclidean>
-extern void filterSSE4(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
-
-template<typename pixel_t, int Operator, bool euclidean>
-extern void filterAVX2(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
-
-template<typename pixel_t, int Operator, bool euclidean>
-extern void filterAVX512(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept;
+#include "vectorclass/instrset.h"
 #endif
 
-template<typename pixel_t, int Operator, bool euclidean>
-static void filterC(const VSFrame* src, VSFrame* dst, const EdgeMasksData* VS_RESTRICT d, const VSAPI* vsapi) noexcept {
-    using scalar_t = std::conditional_t<std::is_integral_v<pixel_t>, int, float>;
+#include "edgemasks.h"
+#include "edgemasks_kernel.h"
 
-    for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-        if (d->process[plane]) {
-            const int width = vsapi->getFrameWidth(src, plane);
-            const int height = vsapi->getFrameHeight(src, plane);
-            const ptrdiff_t stride = vsapi->getStride(src, plane) / sizeof(pixel_t);
-            auto srcp0 = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, plane));
-            auto dstp = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, plane));
+namespace edgemasks {
 
-            pixel_t a00, a01, a02, a03, a04;
-            pixel_t a10, a11, a12, a13, a14;
-            pixel_t a20, a21, a22, a23, a24;
-            pixel_t a30, a31, a32, a33, a34;
-            pixel_t a40, a41, a42, a43, a44;
+namespace {
 
-            auto detect = [&]() noexcept {
-                scalar_t gx, gy;
-                float g;
+// In the order of the opt argument's values, as parseOpt casts the integer straight to Opt.
+enum class Opt { Auto, C, Sse4, Avx2, Avx512 };
 
-                if constexpr (Operator == Tritical) {
-                    gx = a10 - a12;
-                    gy = a01 - a21;
-                } else if constexpr (Operator == Cross) {
-                    gx = a00 - a22;
-                    gy = a02 - a20;
-                } else if constexpr (Operator == Prewitt) {
-                    gx = a00 + a10 + a20 - a02 - a12 - a22;
-                    gy = a00 + a01 + a02 - a20 - a21 - a22;
-                } else if constexpr (Operator == Sobel) {
-                    gx = a00 + 2 * a10 + a20 - a02 - 2 * a12 - a22;
-                    gy = a00 + 2 * a01 + a02 - a20 - 2 * a21 - a22;
-                } else if constexpr (Operator == Scharr) {
-                    gx = 3 * (a00 + a20) + 10 * a10 - 3 * (a02 + a22) - 10 * a12;
-                    gy = 3 * (a00 + a02) + 10 * a01 - 3 * (a20 + a22) - 10 * a21;
-                } else if constexpr (Operator == RScharr) {
-                    gx = 47 * (a00 + a20) + 162 * a10 - 47 * (a02 + a22) - 162 * a12;
-                    gy = 47 * (a00 + a02) + 162 * a01 - 47 * (a20 + a22) - 162 * a21;
-                } else if constexpr (Operator == Kroon) {
-                    gx = 17 * (a00 + a20) + 61 * a10 - 17 * (a02 + a22) - 61 * a12;
-                    gy = 17 * (a00 + a02) + 61 * a01 - 17 * (a20 + a22) - 61 * a21;
-                } else if constexpr (Operator == Robinson3) {
-                    const scalar_t g1 = a02 + a01 + a00 - a20 - a21 - a22;
-                    const scalar_t g2 = a01 + a00 + a10 - a21 - a22 - a12;
-                    const scalar_t g3 = a00 + a10 + a20 - a22 - a12 - a02;
-                    const scalar_t g4 = a10 + a20 + a21 - a12 - a02 - a01;
-                    g = std::max({ std::abs(g1), std::abs(g2), std::abs(g3), std::abs(g4) });
-                } else if constexpr (Operator == Robinson5) {
-                    const scalar_t g1 = a02 + 2 * a01 + a00 - a20 - 2 * a21 - a22;
-                    const scalar_t g2 = a01 + 2 * a00 + a10 - a21 - 2 * a22 - a12;
-                    const scalar_t g3 = a00 + 2 * a10 + a20 - a22 - 2 * a12 - a02;
-                    const scalar_t g4 = a10 + 2 * a20 + a21 - a12 - 2 * a02 - a01;
-                    g = std::max({ std::abs(g1), std::abs(g2), std::abs(g3), std::abs(g4) });
-                } else if constexpr (Operator == Kirsch) {
-                    const scalar_t g1 = 5 * (a02 + a01 + a00) - 3 * (a10 + a20 + a21 + a22 + a12);
-                    const scalar_t g2 = 5 * (a01 + a00 + a10) - 3 * (a20 + a21 + a22 + a12 + a02);
-                    const scalar_t g3 = 5 * (a00 + a10 + a20) - 3 * (a21 + a22 + a12 + a02 + a01);
-                    const scalar_t g4 = 5 * (a10 + a20 + a21) - 3 * (a22 + a12 + a02 + a01 + a00);
-                    const scalar_t g5 = 5 * (a20 + a21 + a22) - 3 * (a12 + a02 + a01 + a00 + a10);
-                    const scalar_t g6 = 5 * (a21 + a22 + a12) - 3 * (a02 + a01 + a00 + a10 + a20);
-                    const scalar_t g7 = 5 * (a22 + a12 + a02) - 3 * (a01 + a00 + a10 + a20 + a21);
-                    const scalar_t g8 = 5 * (a12 + a02 + a01) - 3 * (a00 + a10 + a20 + a21 + a22);
-                    g = std::max({ std::abs(g1), std::abs(g2), std::abs(g3), std::abs(g4), std::abs(g5), std::abs(g6), std::abs(g7), std::abs(g8) });
-                } else if constexpr (Operator == ExPrewitt) {
-                    gx = 2 * (a00 + a10 + a20 + a30 + a40) + a01 + a11 + a21 + a31 + a41
-                        - a03 - a13 - a23 - a33 - a43 - 2 * (a04 + a14 + a24 + a34 + a44);
-                    gy = 2 * (a00 + a01 + a02 + a03 + a04) + a10 + a11 + a12 + a13 + a14
-                        - a30 - a31 - a32 - a33 - a34 - 2 * (a40 + a41 + a42 + a43 + a44);
-                } else if constexpr (Operator == ExSobel) {
-                    gx = 2 * (a00 + a10 + a30 + a40) + 4 * a20 + a01 + a11 + 2 * a21 + a31 + a41
-                        - a03 - a13 - 2 * a23 - a33 - a43 - 2 * (a04 + a14 + a34 + a44) - 4 * a24;
-                    gy = 2 * (a00 + a01 + a03 + a04) + 4 * a02 + a10 + a11 + 2 * a12 + a13 + a14
-                        - a30 - a31 - 2 * a32 - a33 - a34 - 2 * (a40 + a41 + a43 + a44) - 4 * a42;
-                } else if constexpr (Operator == FDoG) {
-                    gx = a00 + a01 + a40 + a41 + 2 * (a10 + a11 + a30 + a31) + 3 * (a20 + a21)
-                        - a03 - a04 - a43 - a44 - 2 * (a13 + a14 + a33 + a34) - 3 * (a23 + a24);
-                    gy = a00 + a10 + a04 + a14 + 2 * (a01 + a11 + a03 + a13) + 3 * (a02 + a12)
-                        - a30 - a40 - a34 - a44 - 2 * (a31 + a41 + a33 + a43) - 3 * (a32 + a42);
-                } else if constexpr (Operator == ExKirsch) {
-                    const scalar_t g1 = 9 * (a14 + a04 + a03 + a02 + a01 + a00 + a10) - 7 * (a20 + a30 + a40 + a41 + a42 + a43 + a44 + a34 + a24)
-                        + 5 * (a13 + a12 + a11) - 3 * (a21 + a31 + a32 + a33 + a23);
-                    const scalar_t g2 = 9 * (a03 + a02 + a01 + a00 + a10 + a20 + a30) - 7 * (a40 + a41 + a42 + a43 + a44 + a34 + a24 + a14 + a04)
-                        + 5 * (a12 + a11 + a21) - 3 * (a31 + a32 + a33 + a23 + a13);
-                    const scalar_t g3 = 9 * (a01 + a00 + a10 + a20 + a30 + a40 + a41) - 7 * (a42 + a43 + a44 + a34 + a24 + a14 + a04 + a03 + a02)
-                        + 5 * (a11 + a21 + a31) - 3 * (a32 + a33 + a23 + a13 + a12);
-                    const scalar_t g4 = 9 * (a10 + a20 + a30 + a40 + a41 + a42 + a43) - 7 * (a44 + a34 + a24 + a14 + a04 + a03 + a02 + a01 + a00)
-                        + 5 * (a21 + a31 + a32) - 3 * (a33 + a23 + a13 + a12 + a11);
-                    const scalar_t g5 = 9 * (a30 + a40 + a41 + a42 + a43 + a44 + a34) - 7 * (a24 + a14 + a04 + a03 + a02 + a01 + a00 + a10 + a20)
-                        + 5 * (a31 + a32 + a33) - 3 * (a23 + a13 + a12 + a11 + a21);
-                    const scalar_t g6 = 9 * (a41 + a42 + a43 + a44 + a34 + a24 + a14) - 7 * (a04 + a03 + a02 + a01 + a00 + a10 + a20 + a30 + a40)
-                        + 5 * (a32 + a33 + a23) - 3 * (a13 + a12 + a11 + a21 + a31);
-                    const scalar_t g7 = 9 * (a43 + a44 + a34 + a24 + a14 + a04 + a03) - 7 * (a02 + a01 + a00 + a10 + a20 + a30 + a40 + a41 + a42)
-                        + 5 * (a33 + a23 + a13) - 3 * (a12 + a11 + a21 + a31 + a32);
-                    const scalar_t g8 = 9 * (a34 + a24 + a14 + a04 + a03 + a02 + a01) - 7 * (a00 + a10 + a20 + a30 + a40 + a41 + a42 + a43 + a44)
-                        + 5 * (a23 + a13 + a12) - 3 * (a11 + a21 + a31 + a32 + a33);
-                    g = std::max({ std::abs(g1), std::abs(g2), std::abs(g3), std::abs(g4), std::abs(g5), std::abs(g6), std::abs(g7), std::abs(g8) });
-                }
+template<typename T>
+using PerPlane = std::array<T, 3>;
 
-                if constexpr (euclidean)
-                    g = std::sqrt(static_cast<float>(gx) * gx + static_cast<float>(gy) * gy);
+struct NodeDeleter {
+    const VSAPI* vsapi;
+    void operator()(VSNode* node) const noexcept { vsapi->freeNode(node); }
+};
 
-                g *= d->scale[plane];
+struct FrameDeleter {
+    const VSAPI* vsapi;
+    void operator()(const VSFrame* frame) const noexcept { vsapi->freeFrame(frame); }
+};
 
-                if constexpr (std::is_integral_v<pixel_t>)
-                    return static_cast<int>(std::min(g + 0.5f, d->peak));
-                else
-                    return g;
-            };
+using NodePtr = std::unique_ptr<VSNode, NodeDeleter>;
+using FramePtr = std::unique_ptr<const VSFrame, FrameDeleter>;
 
-            for (int y = 0; y < height; y++) {
-                auto prev1 = (y == 0) ? srcp0 + stride : srcp0 - stride;
-                auto next1 = (y == height - 1) ? srcp0 - stride : srcp0 + stride;
+struct FilterParams {
+    NodePtr node;
+    const VSVideoInfo* vi;
+    PerPlane<bool> process;
+    PerPlane<float> scale;
+    float peak;
+};
 
-                if (d->matrix == 3) {
-                    int x = 0;
-                    a00 = prev1[x + 1]; a01 = prev1[x]; a02 = prev1[x + 1];
-                    a10 = srcp0[x + 1]; a11 = srcp0[x]; a12 = srcp0[x + 1];
-                    a20 = next1[x + 1]; a21 = next1[x]; a22 = next1[x + 1];
-                    dstp[x] = detect();
+template<Pixel pixel_t>
+struct EdgeMasksData {
+    FilterParams params;
+    PlaneFilter<pixel_t> filter;
+};
 
-                    for (x = 1; x < width - 1; x++) {
-                        a00 = prev1[x - 1]; a01 = prev1[x]; a02 = prev1[x + 1];
-                        a10 = srcp0[x - 1]; a11 = srcp0[x]; a12 = srcp0[x + 1];
-                        a20 = next1[x - 1]; a21 = next1[x]; a22 = next1[x + 1];
-                        dstp[x] = detect();
-                    }
+// Out of line and flattened so that its loop holds nothing but the formulas, the shape that compilers vectorize.
+template<Pixel pixel_t, Operator op, std::invocable<int> ColumnOf>
+[[gnu::noinline, gnu::flatten]] void filterColumns(const Plane<pixel_t>& plane, int y, int begin, int end, ColumnOf columnOf) noexcept {
+    using Columns = std::array<Scalar<pixel_t>, windowSize(op)>;
 
-                    x = width - 1;
-                    a00 = prev1[x - 1]; a01 = prev1[x]; a02 = prev1[x - 1];
-                    a10 = srcp0[x - 1]; a11 = srcp0[x]; a12 = srcp0[x - 1];
-                    a20 = next1[x - 1]; a21 = next1[x]; a22 = next1[x - 1];
-                    dstp[x] = detect();
-                } else {
-                    auto prev2 = (y == 0) ? srcp0 + stride * 2 : (y == 1 ? srcp0 : srcp0 - stride * 2);
-                    auto next2 = (y == height - 1) ? srcp0 - stride * 2 : (y == height - 2 ? srcp0 : srcp0 + stride * 2);
+    const auto [src, dst, srcStride, dstStride, width, height, scale, peak] = plane;
+    const auto rows = windowRows(plane, y);
+    pixel_t* const dstRow = dst + y * dstStride;
 
-                    int x = 0;
-                    a00 = prev2[x + 2]; a01 = prev2[x + 1]; a02 = prev2[x]; a03 = prev2[x + 1]; a04 = prev2[x + 2];
-                    a10 = prev1[x + 2]; a11 = prev1[x + 1]; a12 = prev1[x]; a13 = prev1[x + 1]; a14 = prev1[x + 2];
-                    a20 = srcp0[x + 2]; a21 = srcp0[x + 1]; a22 = srcp0[x]; a23 = srcp0[x + 1]; a24 = srcp0[x + 2];
-                    a30 = next1[x + 2]; a31 = next1[x + 1]; a32 = next1[x]; a33 = next1[x + 1]; a34 = next1[x + 2];
-                    a40 = next2[x + 2]; a41 = next2[x + 1]; a42 = next2[x]; a43 = next2[x + 1]; a44 = next2[x + 2];
-                    dstp[x] = detect();
+    for (int x = begin; x < end; x++) {
+        const auto rowOf = [&](const pixel_t* row) noexcept {
+            if constexpr (windowSize(op) == 3)
+                return Columns{ row[columnOf(x - 1)], row[x], row[columnOf(x + 1)] };
+            else
+                return Columns{ row[columnOf(x - 2)], row[columnOf(x - 1)], row[x], row[columnOf(x + 1)], row[columnOf(x + 2)] };
+        };
 
-                    x = 1;
-                    a00 = prev2[x]; a01 = prev2[x - 1]; a02 = prev2[x]; a03 = prev2[x + 1]; a04 = prev2[x + 2];
-                    a10 = prev1[x]; a11 = prev1[x - 1]; a12 = prev1[x]; a13 = prev1[x + 1]; a14 = prev1[x + 2];
-                    a20 = srcp0[x]; a21 = srcp0[x - 1]; a22 = srcp0[x]; a23 = srcp0[x + 1]; a24 = srcp0[x + 2];
-                    a30 = next1[x]; a31 = next1[x - 1]; a32 = next1[x]; a33 = next1[x + 1]; a34 = next1[x + 2];
-                    a40 = next2[x]; a41 = next2[x - 1]; a42 = next2[x]; a43 = next2[x + 1]; a44 = next2[x + 2];
-                    dstp[x] = detect();
+        const float scaled{ magnitude(response<op>(makeWindow<windowSize(op)>(rows, rowOf))) * scale };
 
-                    for (x = 2; x < width - 2; x++) {
-                        a00 = prev2[x - 2]; a01 = prev2[x - 1]; a02 = prev2[x]; a03 = prev2[x + 1]; a04 = prev2[x + 2];
-                        a10 = prev1[x - 2]; a11 = prev1[x - 1]; a12 = prev1[x]; a13 = prev1[x + 1]; a14 = prev1[x + 2];
-                        a20 = srcp0[x - 2]; a21 = srcp0[x - 1]; a22 = srcp0[x]; a23 = srcp0[x + 1]; a24 = srcp0[x + 2];
-                        a30 = next1[x - 2]; a31 = next1[x - 1]; a32 = next1[x]; a33 = next1[x + 1]; a34 = next1[x + 2];
-                        a40 = next2[x - 2]; a41 = next2[x - 1]; a42 = next2[x]; a43 = next2[x + 1]; a44 = next2[x + 2];
-                        dstp[x] = detect();
-                    }
+        if constexpr (std::integral<pixel_t>)
+            dstRow[x] = static_cast<pixel_t>(std::min(scaled + 0.5f, peak));
+        else
+            dstRow[x] = scaled;
+    }
+}
 
-                    x = width - 2;
-                    a00 = prev2[x - 2]; a01 = prev2[x - 1]; a02 = prev2[x]; a03 = prev2[x + 1]; a04 = prev2[x];
-                    a10 = prev1[x - 2]; a11 = prev1[x - 1]; a12 = prev1[x]; a13 = prev1[x + 1]; a14 = prev1[x];
-                    a20 = srcp0[x - 2]; a21 = srcp0[x - 1]; a22 = srcp0[x]; a23 = srcp0[x + 1]; a24 = srcp0[x];
-                    a30 = next1[x - 2]; a31 = next1[x - 1]; a32 = next1[x]; a33 = next1[x + 1]; a34 = next1[x];
-                    a40 = next2[x - 2]; a41 = next2[x - 1]; a42 = next2[x]; a43 = next2[x + 1]; a44 = next2[x];
-                    dstp[x] = detect();
+template<Pixel pixel_t, Operator op>
+void filterC(const Plane<pixel_t>& plane) noexcept {
+    constexpr int radius{ windowSize(op) / 2 };
 
-                    x = width - 1;
-                    a00 = prev2[x - 2]; a01 = prev2[x - 1]; a02 = prev2[x]; a03 = prev2[x - 1]; a04 = prev2[x - 2];
-                    a10 = prev1[x - 2]; a11 = prev1[x - 1]; a12 = prev1[x]; a13 = prev1[x - 1]; a14 = prev1[x - 2];
-                    a20 = srcp0[x - 2]; a21 = srcp0[x - 1]; a22 = srcp0[x]; a23 = srcp0[x - 1]; a24 = srcp0[x - 2];
-                    a30 = next1[x - 2]; a31 = next1[x - 1]; a32 = next1[x]; a33 = next1[x - 1]; a34 = next1[x - 2];
-                    a40 = next2[x - 2]; a41 = next2[x - 1]; a42 = next2[x]; a43 = next2[x - 1]; a44 = next2[x - 2];
-                    dstp[x] = detect();
-                }
+    const auto mirrored = [width = plane.width](int x) noexcept { return mirror(x, width); };
 
-                srcp0 += stride;
-                dstp += stride;
-            }
+    for (int y = 0; y < plane.height; y++) {
+        filterColumns<pixel_t, op>(plane, y, 0, radius, mirrored);
+        filterColumns<pixel_t, op>(plane, y, radius, plane.width - radius, std::identity{});
+        filterColumns<pixel_t, op>(plane, y, plane.width - radius, plane.width, mirrored);
+    }
+}
+
+template<Pixel pixel_t>
+constexpr FilterTable<pixel_t> filtersC = withAllOperators([](auto... ops) { return FilterTable<pixel_t>{ filterC<pixel_t, decltype(ops)::value>... }; });
+
+#ifdef EDGEMASKS_X86
+// instrset_detect() must not run concurrently, so every pixel type shares this one call.
+int detectedInstrset() noexcept {
+    static const int iset{ instrset_detect() };
+    return iset;
+}
+#endif
+
+template<Pixel pixel_t>
+const FilterTable<pixel_t>& selectFilters([[maybe_unused]] Opt opt) noexcept {
+#ifdef EDGEMASKS_X86
+    constexpr int instrsetSse4{ 6 };
+    constexpr int instrsetAvx2{ 8 };
+    constexpr int instrsetAvx512{ 10 };
+
+    const int iset{ detectedInstrset() };
+
+    if ((opt == Opt::Auto && iset >= instrsetAvx512) || opt == Opt::Avx512)
+        return filtersAvx512<pixel_t>();
+
+    if ((opt == Opt::Auto && iset >= instrsetAvx2) || opt == Opt::Avx2)
+        return filtersAvx2<pixel_t>();
+
+    if ((opt == Opt::Auto && iset >= instrsetSse4) || opt == Opt::Sse4)
+        return filtersSse4<pixel_t>();
+#endif
+
+    return filtersC<pixel_t>;
+}
+
+template<Pixel pixel_t>
+void filterFrame(const EdgeMasksData<pixel_t>& d, const VSFrame* src, VSFrame* dst, const VSAPI* vsapi) noexcept {
+    constexpr std::ptrdiff_t pixelSize{ sizeof(pixel_t) };
+
+    for (int plane = 0; plane < d.params.vi->format.numPlanes; plane++) {
+        if (d.params.process[plane]) {
+            d.filter({ .src = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, plane)),
+                       .dst = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, plane)),
+                       .srcStride = vsapi->getStride(src, plane) / pixelSize,
+                       .dstStride = vsapi->getStride(dst, plane) / pixelSize,
+                       .width = vsapi->getFrameWidth(src, plane),
+                       .height = vsapi->getFrameHeight(src, plane),
+                       .scale = d.params.scale[plane],
+                       .peak = d.params.peak });
         }
     }
 }
 
-template<typename pixel_t>
-static auto selectC(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterC<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterC<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterC<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterC<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterC<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterC<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterC<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterC<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterC<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterC<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterC<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterC<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterC<pixel_t, FDoG, true>;
-    else
-        return filterC<pixel_t, ExKirsch, false>;
-}
-
-#ifdef EDGEMASKS_X86
-template<typename pixel_t>
-static auto selectSSE4(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterSSE4<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterSSE4<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterSSE4<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterSSE4<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterSSE4<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterSSE4<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterSSE4<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterSSE4<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterSSE4<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterSSE4<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterSSE4<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterSSE4<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterSSE4<pixel_t, FDoG, true>;
-    else
-        return filterSSE4<pixel_t, ExKirsch, false>;
-}
-
-template<typename pixel_t>
-static auto selectAVX2(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterAVX2<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterAVX2<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterAVX2<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterAVX2<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterAVX2<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterAVX2<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterAVX2<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterAVX2<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterAVX2<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterAVX2<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterAVX2<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterAVX2<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterAVX2<pixel_t, FDoG, true>;
-    else
-        return filterAVX2<pixel_t, ExKirsch, false>;
-}
-
-template<typename pixel_t>
-static auto selectAVX512(const std::string& filterName) noexcept {
-    if (filterName == "Tritical")
-        return filterAVX512<pixel_t, Tritical, true>;
-    else if (filterName == "Cross")
-        return filterAVX512<pixel_t, Cross, true>;
-    else if (filterName == "Prewitt")
-        return filterAVX512<pixel_t, Prewitt, true>;
-    else if (filterName == "Sobel")
-        return filterAVX512<pixel_t, Sobel, true>;
-    else if (filterName == "Scharr")
-        return filterAVX512<pixel_t, Scharr, true>;
-    else if (filterName == "RScharr")
-        return filterAVX512<pixel_t, RScharr, true>;
-    else if (filterName == "Kroon")
-        return filterAVX512<pixel_t, Kroon, true>;
-    else if (filterName == "Robinson3")
-        return filterAVX512<pixel_t, Robinson3, false>;
-    else if (filterName == "Robinson5")
-        return filterAVX512<pixel_t, Robinson5, false>;
-    else if (filterName == "Kirsch")
-        return filterAVX512<pixel_t, Kirsch, false>;
-    else if (filterName == "ExPrewitt")
-        return filterAVX512<pixel_t, ExPrewitt, true>;
-    else if (filterName == "ExSobel")
-        return filterAVX512<pixel_t, ExSobel, true>;
-    else if (filterName == "FDoG")
-        return filterAVX512<pixel_t, FDoG, true>;
-    else
-        return filterAVX512<pixel_t, ExKirsch, false>;
-}
-#endif
-
-static const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, [[maybe_unused]] void** frameData, VSFrameContext* frameCtx,
-                                              VSCore* core, const VSAPI* vsapi) {
-    auto d = static_cast<const EdgeMasksData*>(instanceData);
+template<Pixel pixel_t>
+const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instanceData, void**, VSFrameContext* frameCtx, VSCore* core,
+                                       const VSAPI* vsapi) noexcept {
+    const auto& d = *static_cast<const EdgeMasksData<pixel_t>*>(instanceData);
+    const auto& node = d.params.node;
 
     if (activationReason == arInitial) {
-        vsapi->requestFrameFilter(n, d->node, frameCtx);
+        vsapi->requestFrameFilter(n, node.get(), frameCtx);
     } else if (activationReason == arAllFramesReady) {
-        const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
-        const VSFrame* fr[] = { d->process[0] ? nullptr : src, d->process[1] ? nullptr : src, d->process[2] ? nullptr : src };
-        const int pl[] = { 0, 1, 2 };
-        VSFrame* dst = vsapi->newVideoFrame2(&d->vi->format, d->vi->width, d->vi->height, fr, pl, src, core);
+        const FramePtr src{ vsapi->getFrameFilter(n, node.get(), frameCtx), FrameDeleter{ vsapi } };
+        PerPlane<const VSFrame*> planeSrc{ process[0] ? nullptr : src.get(), process[1] ? nullptr : src.get(), process[2] ? nullptr : src.get() };
+        constexpr std::array planes{ 0, 1, 2 };
+        VSFrame* const dst = vsapi->newVideoFrame2(&vi->format, vi->width, vi->height, planeSrc.data(), planes.data(), src.get(), core);
 
-        d->filter(src, dst, d, vsapi);
+        filterFrame(d, src.get(), dst, vsapi);
 
         vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maReplace);
-
-        vsapi->freeFrame(src);
         return dst;
     }
 
     return nullptr;
 }
 
-static void VS_CC edgemasksFree(void* instanceData, [[maybe_unused]] VSCore* core, const VSAPI* vsapi) {
-    auto d = static_cast<EdgeMasksData*>(instanceData);
-    vsapi->freeNode(d->node);
-    delete d;
+template<Pixel pixel_t>
+void VS_CC edgemasksFree(void* instanceData, VSCore*, const VSAPI*) noexcept {
+    const std::unique_ptr<EdgeMasksData<pixel_t>> d{ static_cast<EdgeMasksData<pixel_t>*>(instanceData) };
 }
 
-static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi) {
-    auto d = std::make_unique<EdgeMasksData>();
+PerPlane<bool> parsePlanes(const VSMap* in, const VSVideoFormat& format, const VSAPI* vsapi) {
+    const int count{ vsapi->mapNumElements(in, "planes") };
 
-    d->filterName = static_cast<const char*>(userData);
+    PerPlane<bool> process{};
+    process.fill(count <= 0);
 
-    try {
-        d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
-        d->vi = vsapi->getVideoInfo(d->node);
-        int err;
+    for (int i = 0; i < count; i++) {
+        const int n{ vsapi->mapGetIntSaturated(in, "planes", i, nullptr) };
 
-        if (!vsh::isConstantVideoFormat(d->vi) ||
-            (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) ||
-            (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
-            throw "only 8-16 bit integer and 32 bit float with constant format and dimensions supported"s;
+        if (n < 0 || n >= format.numPlanes)
+            throw std::invalid_argument{ "plane index out of range" };
 
-        const int m = vsapi->mapNumElements(in, "planes");
+        if (process[n])
+            throw std::invalid_argument{ "plane specified twice" };
 
-        for (int i = 0; i < 3; i++)
-            d->process[i] = (m <= 0);
-
-        for (int i = 0; i < m; i++) {
-            const int n = vsapi->mapGetIntSaturated(in, "planes", i, nullptr);
-
-            if (n < 0 || n >= d->vi->format.numPlanes)
-                throw "plane index out of range"s;
-
-            if (d->process[n])
-                throw "plane specified twice"s;
-
-            d->process[n] = true;
-        }
-
-        if (vsapi->mapNumElements(in, "scale") > d->vi->format.numPlanes)
-            throw "scale has more values specified than there are planes"s;
-
-        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            d->scale[plane] = vsapi->mapGetFloatSaturated(in, "scale", plane, &err);
-
-            if (err) {
-                if (plane == 0)
-                    d->scale[plane] = 1.0f;
-                else
-                    d->scale[plane] = d->scale[plane - 1];
-            } else {
-                if (!std::isfinite(d->scale[plane]) || d->scale[plane] <= 0.0f)
-                    throw "scale must be finite and greater than 0.0"s;
-            }
-        }
-
-        const int opt = vsapi->mapGetIntSaturated(in, "opt", 0, &err);
-
-        if (d->filterName == "ExPrewitt" || d->filterName == "ExSobel" || d->filterName == "FDoG" || d->filterName == "ExKirsch")
-            d->matrix = 5;
-        else
-            d->matrix = 3;
-
-        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            if (d->process[plane]) {
-                if (d->vi->width >> (plane > 0 ? d->vi->format.subSamplingW : 0) < d->matrix)
-                    throw "plane's width must be greater than or equal to " + std::to_string(d->matrix);
-
-                if (d->vi->height >> (plane > 0 ? d->vi->format.subSamplingH : 0) < d->matrix)
-                    throw "plane's height must be greater than or equal to " + std::to_string(d->matrix);
-            }
-        }
-
-        if (opt < 0 || opt > 4)
-            throw "opt must be 0, 1, 2, 3, or 4"s;
-
-        for (int plane = 0; plane < d->vi->format.numPlanes; plane++) {
-            if (d->filterName == "Scharr")
-                d->scale[plane] /= 3;
-            else if (d->filterName == "RScharr")
-                d->scale[plane] /= 47;
-            else if (d->filterName == "Kroon")
-                d->scale[plane] /= 17;
-            else if (d->filterName == "FDoG")
-                d->scale[plane] /= 2;
-        }
-
-        {
-#ifdef EDGEMASKS_X86
-            static const int iset = instrset_detect();
-#endif
-
-            if (d->vi->format.bytesPerSample == 1) {
-                d->filter = selectC<uint8_t>(d->filterName);
-
-#ifdef EDGEMASKS_X86
-                if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<uint8_t>(d->filterName);
-                else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<uint8_t>(d->filterName);
-                else if ((opt == 0 && iset >= 6) || opt == 2)
-                    d->filter = selectSSE4<uint8_t>(d->filterName);
-#endif
-            } else if (d->vi->format.bytesPerSample == 2) {
-                d->filter = selectC<uint16_t>(d->filterName);
-
-#ifdef EDGEMASKS_X86
-                if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<uint16_t>(d->filterName);
-                else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<uint16_t>(d->filterName);
-                else if ((opt == 0 && iset >= 6) || opt == 2)
-                    d->filter = selectSSE4<uint16_t>(d->filterName);
-#endif
-            } else {
-                d->filter = selectC<float>(d->filterName);
-
-#ifdef EDGEMASKS_X86
-                if ((opt == 0 && iset >= 10) || opt == 4)
-                    d->filter = selectAVX512<float>(d->filterName);
-                else if ((opt == 0 && iset >= 8) || opt == 3)
-                    d->filter = selectAVX2<float>(d->filterName);
-                else if ((opt == 0 && iset >= 6) || opt == 2)
-                    d->filter = selectSSE4<float>(d->filterName);
-#endif
-            }
-        }
-
-        if (d->vi->format.sampleType == stInteger)
-            d->peak = (1 << d->vi->format.bitsPerSample) - 1;
-    } catch (const std::string& error) {
-        vsapi->mapSetError(out, (d->filterName + ": " + error).c_str());
-        vsapi->freeNode(d->node);
-        return;
+        process[n] = true;
     }
 
-    VSFilterDependency deps[] = { {d->node, rpStrictSpatial} };
-    vsapi->createVideoFilter(out, d->filterName.c_str(), d->vi, edgemasksGetFrame, edgemasksFree, fmParallel, deps, 1, d.get(), core);
-    d.release();
+    return process;
 }
 
-VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI* vspapi) {
+PerPlane<float> parseScale(const VSMap* in, const VSVideoFormat& format, const VSAPI* vsapi) {
+    if (vsapi->mapNumElements(in, "scale") > format.numPlanes)
+        throw std::invalid_argument{ "scale has more values specified than there are planes" };
+
+    PerPlane<float> scale{};
+
+    for (int plane = 0; plane < format.numPlanes; plane++) {
+        int err{};
+        scale[plane] = vsapi->mapGetFloatSaturated(in, "scale", plane, &err);
+
+        if (err)
+            scale[plane] = plane == 0 ? 1.0f : scale[plane - 1];
+        else if (!std::isfinite(scale[plane]) || scale[plane] <= 0.0f)
+            throw std::invalid_argument{ "scale must be finite and greater than 0.0" };
+    }
+
+    return scale;
+}
+
+void checkDimensions(const VSVideoInfo& vi, PerPlane<bool> process, int minimum) {
+    const VSVideoFormat& format{ vi.format };
+
+    for (int plane = 0; plane < format.numPlanes; plane++) {
+        if (process[plane]) {
+            const int planeWidth{ vi.width >> (plane > 0 ? format.subSamplingW : 0) };
+            const int planeHeight{ vi.height >> (plane > 0 ? format.subSamplingH : 0) };
+
+            if (planeWidth < minimum)
+                throw std::invalid_argument{ "plane " + std::to_string(plane) + "'s width must be greater than or equal to " + std::to_string(minimum) };
+
+            if (planeHeight < minimum)
+                throw std::invalid_argument{ "plane " + std::to_string(plane) + "'s height must be greater than or equal to " + std::to_string(minimum) };
+        }
+    }
+}
+
+Opt parseOpt(const VSMap* in, const VSAPI* vsapi) {
+    int err{};
+    const int opt{ vsapi->mapGetIntSaturated(in, "opt", 0, &err) };
+
+    if (opt < 0 || opt > static_cast<int>(Opt::Avx512))
+        throw std::invalid_argument{ "opt must be 0, 1, 2, 3, or 4" };
+
+    return static_cast<Opt>(opt);
+}
+
+constexpr float scaleDivisor(Operator op) noexcept {
+    switch (op) {
+    case Operator::Scharr:
+        return 3.0f;
+    case Operator::RScharr:
+        return 47.0f;
+    case Operator::Kroon:
+        return 17.0f;
+    case Operator::FDoG:
+        return 2.0f;
+    default:
+        return 1.0f;
+    }
+}
+
+template<Pixel pixel_t>
+void startFilter(FilterParams params, Operator op, Opt opt, VSMap* out, VSCore* core, const VSAPI* vsapi) {
+    const PlaneFilter<pixel_t> filter{ selectFilters<pixel_t>(opt)[static_cast<std::size_t>(op)] };
+    auto d = std::make_unique<EdgeMasksData<pixel_t>>(std::move(params), filter);
+    const VSFilterDependency dependency{ d->params.node.get(), rpStrictSpatial };
+
+    vsapi->createVideoFilter(out, name(op), d->params.vi, edgemasksGetFrame<pixel_t>, edgemasksFree<pixel_t>, fmParallel, &dependency, 1, d.get(), core);
+    // The core owns d now and releases it through edgemasksFree. It can only refuse an invalid vi, and this vi is the input clip's.
+    std::ignore = d.release();
+}
+
+void createFilter(Operator op, const VSMap* in, VSMap* out, VSCore* core, const VSAPI* vsapi) noexcept {
+    try {
+        NodePtr node{ vsapi->mapGetNode(in, "clip", 0, nullptr), NodeDeleter{ vsapi } };
+        const VSVideoInfo* const vi = vsapi->getVideoInfo(node.get());
+        const VSVideoFormat& format{ vi->format };
+
+        if (!vsh::isConstantVideoFormat(vi) ||
+            (format.sampleType == stInteger && format.bitsPerSample > 16) ||
+            (format.sampleType == stFloat && format.bitsPerSample != 32))
+            throw std::invalid_argument{ "only 8-16 bit integer and 32 bit float with constant format and dimensions supported" };
+
+        const auto process = parsePlanes(in, format, vsapi);
+        auto scale = parseScale(in, format, vsapi);
+
+        checkDimensions(*vi, process, windowSize(op));
+
+        const Opt opt{ parseOpt(in, vsapi) };
+
+        for (float& value : scale)
+            value /= scaleDivisor(op);
+
+        const float peak{ format.sampleType == stInteger ? static_cast<float>((1u << format.bitsPerSample) - 1u) : 0.0f };
+        FilterParams params{ .node = std::move(node), .vi = vi, .process = process, .scale = scale, .peak = peak };
+
+        switch (format.bytesPerSample) {
+        case 1:
+            startFilter<std::uint8_t>(std::move(params), op, opt, out, core, vsapi);
+            break;
+        case 2:
+            startFilter<std::uint16_t>(std::move(params), op, opt, out, core, vsapi);
+            break;
+        default:
+            startFilter<float>(std::move(params), op, opt, out, core, vsapi);
+        }
+    } catch (const std::exception& error) {
+        vsapi->mapSetError(out, (std::string{ name(op) } + ": " + error.what()).c_str());
+    }
+}
+
+template<Operator op>
+void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void*, VSCore* core, const VSAPI* vsapi) noexcept {
+    createFilter(op, in, out, core, vsapi);
+}
+
+}  // namespace
+
+}  // namespace edgemasks
+
+VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI* vspapi) noexcept {
+    using namespace edgemasks;
+
     vspapi->configPlugin("com.holywu.edgemasks",
                          "edgemasks",
                          "Creates an edge mask using various operators",
@@ -531,15 +354,12 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
                          0,
                          plugin);
 
-    const char* operators[] = {
-        "Tritical", "Cross", "Prewitt", "Sobel", "Scharr", "RScharr", "Kroon", "Robinson3", "Robinson5", "Kirsch", "ExPrewitt", "ExSobel", "FDoG", "ExKirsch"
-    };
-
-    for (int i = 0; i < 14; i++)
-        vspapi->registerFunction(operators[i],
-                                 "clip:vnode;planes:int[]:opt;scale:float[]:opt;opt:int:opt;",
-                                 "clip:vnode;",
-                                 edgemasksCreate,
-                                 const_cast<char*>(operators[i]),
-                                 plugin);
+    withAllOperators([&](auto... ops) {
+        (vspapi->registerFunction(name(decltype(ops)::value),
+                                  "clip:vnode;planes:int[]:opt;scale:float[]:opt;opt:int:opt;",
+                                  "clip:vnode;",
+                                  edgemasksCreate<decltype(ops)::value>,
+                                  nullptr,
+                                  plugin), ...);
+    });
 }
