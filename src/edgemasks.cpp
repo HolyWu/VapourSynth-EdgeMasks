@@ -470,7 +470,7 @@ static void VS_CC edgemasksCreate(const VSMap* in, VSMap* out, void* userData, V
 
         {
 #ifdef EDGEMASKS_X86
-            const int iset = instrset_detect();
+            static const int iset = instrset_detect();
 #endif
 
             if (d->vi->format.bytesPerSample == 1) {
