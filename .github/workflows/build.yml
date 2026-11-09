@@ -26,6 +26,8 @@ jobs:
       env:
         CIBW_BUILD: cp314-*
         CIBW_BUILD_FRONTEND: uv
+        CIBW_CONFIG_SETTINGS_LINUX: setup-args=-Dcpp_link_args=-s
+        CIBW_CONFIG_SETTINGS_MACOS: setup-args=-Dcpp_link_args=-Wl,-x
       with:
         output-dir: dist
         extras: uv
@@ -56,22 +58,16 @@ jobs:
         pacboy: >-
           git:p
           ninja:p
-          python-wheel:p
           toolchain:p
           uv:p
 
     - name: Build
       run: |
-        uv build -Csetup-args="-Dcpp_link_args=-static"
+        uv build -Csetup-args="-Dcpp_link_args=-static -s"
 
-    - name: Fix tag and strip dll
+    - name: Fix tag
       run: |
-        cd dist
-        wheel tags --remove --python-tag py3 --abi-tag none *.whl
-        wheel unpack --dest unpacked *.whl
-        rm *.whl
-        strip $(find . -name '*.dll')
-        wheel pack unpacked/*
+        uvx wheel tags --remove --python-tag py3 --abi-tag none dist/*.whl
 
     - uses: actions/upload-artifact@v7
       with:
