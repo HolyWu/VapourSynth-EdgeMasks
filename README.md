@@ -26,7 +26,7 @@ edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int o
 
 - planes: Specifies which planes will be processed. Any unprocessed planes will be simply copied.
 
-- scale: Multiplies all pixels by `scale` before outputting. This can be used to increase or decrease the intensity of edges in the output. Can be specified for each plane individually.
+- scale: Multiplies all pixels by `scale` before outputting. This can be used to increase or decrease the intensity of edges in the output. Can be specified for each plane individually. When fewer values than planes are given, the last value is reused for the remaining planes.
 
 - opt: Specifies which cpu optimizations to use.
   - 0 = auto detect
