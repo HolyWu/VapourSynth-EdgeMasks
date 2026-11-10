@@ -28,12 +28,12 @@ edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int o
 
 - scale: Multiplies all pixels by `scale` before outputting. This can be used to increase or decrease the intensity of edges in the output. Can be specified for each plane individually. When fewer values than planes are given, the last value is reused for the remaining planes.
 
-- opt: Specifies which cpu optimizations to use.
+- opt: Specifies which cpu optimizations to use. Values 2-4 raise an error if the CPU does not support the instruction set to use, which is always the case on platforms other than x86-64.
   - 0 = auto detect
   - 1 = use c
   - 2 = use sse4.2
   - 3 = use avx2
-  - 4 = use avx512
+  - 4 = use avx512, or avx2 if VapourSynth aligns frame strides to less than 64 bytes
 
 
 ## Installation

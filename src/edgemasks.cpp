@@ -22,15 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include <algorithm>
 #include <array>
 #include <cmath>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <functional>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -41,11 +39,15 @@ SOFTWARE.
 #include <VSHelper4.h>
 
 #ifdef EDGEMASKS_X86
+#include <pmmintrin.h>
+#include <xmmintrin.h>
+
 #include "vectorclass/instrset.h"
 #endif
 
 #include "edgemasks.h"
 #include "edgemasks_kernel.h"
+#include "edgemasks_simd.h"
 
 namespace edgemasks {
 
@@ -69,6 +71,7 @@ struct FrameDeleter {
 
 using NodePtr = std::unique_ptr<VSNode, NodeDeleter>;
 using FramePtr = std::unique_ptr<const VSFrame, FrameDeleter>;
+using NewFramePtr = std::unique_ptr<VSFrame, FrameDeleter>;
 
 struct FilterParams {
     NodePtr node;
@@ -84,49 +87,42 @@ struct EdgeMasksData {
     PlaneFilter<pixel_t> filter;
 };
 
-// Out of line and flattened so that its loop holds nothing but the formulas, the shape that compilers vectorize.
-template<Pixel pixel_t, Operator op, std::invocable<int> ColumnOf>
-[[gnu::noinline, gnu::flatten]] void filterColumns(const Plane<pixel_t>& plane, int y, int begin, int end, ColumnOf columnOf) noexcept {
-    using Columns = std::array<Scalar<pixel_t>, windowSize(op)>;
+// Plain values, for the compiler to vectorize.
+struct ScalarIsa {
+    using Narrow = void;
 
-    const auto [src, dst, srcStride, dstStride, width, height, scale, peak] = plane;
-    const auto rows = windowRows(plane, y);
-    pixel_t* const dstRow = dst + y * dstStride;
-
-    for (int x = begin; x < end; x++) {
-        const auto rowOf = [&](const pixel_t* row) noexcept {
-            if constexpr (windowSize(op) == 3)
-                return Columns{ row[columnOf(x - 1)], row[x], row[columnOf(x + 1)] };
-            else
-                return Columns{ row[columnOf(x - 2)], row[columnOf(x - 1)], row[x], row[columnOf(x + 1)], row[columnOf(x + 2)] };
-        };
-
-        const float scaled{ magnitude(response<op>(makeWindow<windowSize(op)>(rows, rowOf))) * scale };
-
-        if constexpr (std::integral<pixel_t>)
-            dstRow[x] = static_cast<pixel_t>(std::min(scaled + 0.5f, peak));
-        else
-            dstRow[x] = scaled;
+    template<typename T>
+    static auto load(const T* p) noexcept {
+        return static_cast<Scalar<T>>(*p);
     }
-}
 
-template<Pixel pixel_t, Operator op>
-void filterC(const Plane<pixel_t>& plane) noexcept {
-    constexpr int radius{ windowSize(op) / 2 };
-
-    const auto mirrored = [width = plane.width](int x) noexcept { return mirror(x, width); };
-
-    for (int y = 0; y < plane.height; y++) {
-        filterColumns<pixel_t, op>(plane, y, 0, radius, mirrored);
-        filterColumns<pixel_t, op>(plane, y, radius, plane.width - radius, std::identity{});
-        filterColumns<pixel_t, op>(plane, y, plane.width - radius, plane.width, mirrored);
+    template<typename T, typename U>
+    static void store(T value, U* p) noexcept {
+        *p = static_cast<U>(value);
     }
-}
+};
 
 template<Pixel pixel_t>
-constexpr FilterTable<pixel_t> filtersC = withAllOperators([](auto... ops) { return FilterTable<pixel_t>{ filterC<pixel_t, decltype(ops)::value>... }; });
+constexpr FilterTable<pixel_t> filtersC = withAllOperators([](auto... ops) {
+    return FilterTable<pixel_t>{ filterPlane<ScalarIsa, pixel_t, Scalar<pixel_t>, decltype(ops)::value>... };
+});
 
 #ifdef EDGEMASKS_X86
+// Flushes denormals to zero while it lives. Vectors that reach past a row's end compute on the stride padding,
+// where a stale denormal costs Intel CPUs a microcode assist per instruction.
+class FlushDenormals {
+public:
+    FlushDenormals() noexcept { _mm_setcsr(saved | _MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON); }
+    FlushDenormals(const FlushDenormals&) = delete;
+    FlushDenormals& operator=(const FlushDenormals&) = delete;
+    FlushDenormals(FlushDenormals&&) = delete;
+    FlushDenormals& operator=(FlushDenormals&&) = delete;
+    ~FlushDenormals() { _mm_setcsr(saved); }
+
+private:
+    const unsigned saved{ _mm_getcsr() };
+};
+
 // instrset_detect() must not run concurrently, so every pixel type shares this one call.
 int detectedInstrset() noexcept {
     static const int iset{ instrset_detect() };
@@ -135,30 +131,42 @@ int detectedInstrset() noexcept {
 #endif
 
 template<Pixel pixel_t>
-const FilterTable<pixel_t>& selectFilters([[maybe_unused]] Opt opt) noexcept {
+const FilterTable<pixel_t>& selectFilters(Opt opt, [[maybe_unused]] bool stridesFitAvx512) {
 #ifdef EDGEMASKS_X86
     constexpr int instrsetSse4{ 6 };
     constexpr int instrsetAvx2{ 8 };
     constexpr int instrsetAvx512{ 10 };
 
     const int iset{ detectedInstrset() };
+    const int forcedInstrset{ opt == Opt::Avx512 && stridesFitAvx512 ? instrsetAvx512 : opt >= Opt::Avx2 ? instrsetAvx2 : opt == Opt::Sse4 ? instrsetSse4 : 0 };
 
-    if ((opt == Opt::Auto && iset >= instrsetAvx512) || opt == Opt::Avx512)
+    if (iset < forcedInstrset)
+        throw std::invalid_argument{ "opt selects an instruction set that the CPU does not support" };
+
+    const int target{ opt == Opt::Auto ? iset : forcedInstrset };
+
+    if (target >= instrsetAvx512 && stridesFitAvx512)
         return filtersAvx512<pixel_t>();
 
-    if ((opt == Opt::Auto && iset >= instrsetAvx2) || opt == Opt::Avx2)
+    if (target >= instrsetAvx2)
         return filtersAvx2<pixel_t>();
 
-    if ((opt == Opt::Auto && iset >= instrsetSse4) || opt == Opt::Sse4)
+    if (target >= instrsetSse4)
         return filtersSse4<pixel_t>();
+#else
+    if (opt > Opt::C)
+        throw std::invalid_argument{ "opt selects an instruction set that the CPU does not support" };
 #endif
 
     return filtersC<pixel_t>;
 }
 
 template<Pixel pixel_t>
-void filterFrame(const EdgeMasksData<pixel_t>& d, const VSFrame* src, VSFrame* dst, const VSAPI* vsapi) noexcept {
+void filterFrame(const EdgeMasksData<pixel_t>& d, const VSFrame* src, VSFrame* dst, const VSAPI* vsapi) {
     constexpr std::ptrdiff_t pixelSize{ sizeof(pixel_t) };
+#ifdef EDGEMASKS_X86
+    const FlushDenormals flushDenormals{};
+#endif
 
     for (int plane = 0; plane < d.params.vi->format.numPlanes; plane++) {
         if (d.params.process[plane]) {
@@ -186,12 +194,17 @@ const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instan
         const FramePtr src{ vsapi->getFrameFilter(n, node.get(), frameCtx), FrameDeleter{ vsapi } };
         PerPlane<const VSFrame*> planeSrc{ process[0] ? nullptr : src.get(), process[1] ? nullptr : src.get(), process[2] ? nullptr : src.get() };
         constexpr std::array planes{ 0, 1, 2 };
-        VSFrame* const dst = vsapi->newVideoFrame2(&vi->format, vi->width, vi->height, planeSrc.data(), planes.data(), src.get(), core);
+        NewFramePtr dst{ vsapi->newVideoFrame2(&vi->format, vi->width, vi->height, planeSrc.data(), planes.data(), src.get(), core), FrameDeleter{ vsapi } };
 
-        filterFrame(d, src.get(), dst, vsapi);
+        try {
+            filterFrame(d, src.get(), dst.get(), vsapi);
+        } catch (const std::bad_alloc&) {
+            vsapi->setFilterError("EdgeMasks: out of memory", frameCtx);
+            return nullptr;
+        }
 
-        vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst), "_Range", VSC_RANGE_FULL, maReplace);
-        return dst;
+        vsapi->mapSetInt(vsapi->getFramePropertiesRW(dst.get()), "_Range", VSC_RANGE_FULL, maReplace);
+        return dst.release();
     }
 
     return nullptr;
@@ -284,9 +297,20 @@ constexpr float scaleDivisor(Operator op) noexcept {
     }
 }
 
+// VapourSynth pads strides to 64 bytes only if AVX-512 was enabled when it loaded, and macOS enables it per thread on first use.
+bool stridesFitAvx512(VSCore* core, const VSAPI* vsapi) noexcept {
+    static const bool fits{ [=] {
+        VSVideoFormat format{};
+        vsapi->queryVideoFormat(&format, cfGray, stInteger, 8, 0, 0, core);
+        const FramePtr probe{ vsapi->newVideoFrame(&format, 1, 1, nullptr, core), FrameDeleter{ vsapi } };
+        return vsapi->getStride(probe.get(), 0) >= 64;
+    }() };
+    return fits;
+}
+
 template<Pixel pixel_t>
 void startFilter(FilterParams params, Operator op, Opt opt, VSMap* out, VSCore* core, const VSAPI* vsapi) {
-    const PlaneFilter<pixel_t> filter{ selectFilters<pixel_t>(opt)[static_cast<std::size_t>(op)] };
+    const PlaneFilter<pixel_t> filter{ selectFilters<pixel_t>(opt, stridesFitAvx512(core, vsapi))[static_cast<std::size_t>(op)] };
     auto d = std::make_unique<EdgeMasksData<pixel_t>>(std::move(params), filter);
     const VSFilterDependency dependency{ d->params.node.get(), rpStrictSpatial };
 

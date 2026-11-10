@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -27,6 +28,18 @@ constexpr int windowSize(Operator op) noexcept {
     return op >= Operator::ExPrewitt ? 5 : 3;
 }
 
+// The sum of the operator's positive weights, which bounds |response| per unit of pixel value.
+static constexpr int gain(Operator op) noexcept {
+    constexpr std::array gains{ 1, 1, 3, 4, 16, 256, 95, 3, 4, 15, 15, 18, 18, 78 };
+    static_assert(gains.size() == static_cast<std::size_t>(Operator::Count));
+    return gains[static_cast<std::size_t>(op)];
+}
+
+// Bounded by peak, so a sample above it can wrap the lanes. That spoils the mask around the sample, but the output stays within peak.
+static constexpr bool fitsNarrow(Operator op, float peak) noexcept {
+    return gain(op) * peak <= std::numeric_limits<std::int16_t>::max();
+}
+
 template<typename T>
 concept Pixel = std::same_as<T, std::uint8_t> || std::same_as<T, std::uint16_t> || std::same_as<T, float>;
 
@@ -45,7 +58,7 @@ struct Plane {
 };
 
 template<Pixel pixel_t>
-using PlaneFilter = void (*)(const Plane<pixel_t>& plane) noexcept;
+using PlaneFilter = void (*)(const Plane<pixel_t>& plane);
 
 // Indexed by Operator.
 template<Pixel pixel_t>

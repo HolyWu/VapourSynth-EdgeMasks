@@ -16,6 +16,7 @@ add_project_arguments(
     '-DEDGEMASKS_VERSION_MAJOR=@0@'.format(version[0].to_int()),
     '-DEDGEMASKS_VERSION_MINOR=@0@'.format(version.get(1, '0').to_int()),
     '-DVS_USE_API_42',
+    '-ffp-contract=fast',
     '-fno-math-errno',
     '-fno-trapping-math',
     '-I' + run_command(py, '-c', 'import vapoursynth as vs; print(vs.get_include())', check: true).stdout().strip(),
@@ -30,23 +31,17 @@ if host_machine.cpu_family() == 'x86_64'
         gnu_symbol_visibility: 'hidden',
     )
 
-    libs += static_library('sse4',
-        files('src/edgemasks_sse4.cpp'),
-        cpp_args: '-march=x86-64-v2',
-        gnu_symbol_visibility: 'hidden',
-    )
-
-    libs += static_library('avx2',
-        files('src/edgemasks_avx2.cpp'),
-        cpp_args: '-march=x86-64-v3',
-        gnu_symbol_visibility: 'hidden',
-    )
-
-    libs += static_library('avx512',
-        files('src/edgemasks_avx512.cpp'),
-        cpp_args: '-march=x86-64-v4',
-        gnu_symbol_visibility: 'hidden',
-    )
+    foreach name, args : {
+        'sse4': ['-march=x86-64-v2'],
+        'avx2': ['-march=x86-64-v3', '-mstackrealign'],
+        'avx512': ['-march=x86-64-v4', '-mstackrealign'],
+    }
+        libs += static_library(name,
+            files('src/edgemasks_' + name + '.cpp'),
+            cpp_args: args,
+            gnu_symbol_visibility: 'hidden',
+        )
+    endforeach
 endif
 
 shared_module('edgemasks',
