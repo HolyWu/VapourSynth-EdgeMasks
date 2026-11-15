@@ -28,6 +28,7 @@ jobs:
         CIBW_BUILD_FRONTEND: uv
         CIBW_CONFIG_SETTINGS_LINUX: setup-args=-Dcpp_link_args=-s
         CIBW_CONFIG_SETTINGS_MACOS: setup-args=-Dcpp_link_args=-Wl,-x
+        CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=13.3
       with:
         output-dir: dist
         extras: uv
