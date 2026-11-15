@@ -10,12 +10,27 @@ libs = []
 
 py = import('python').find_installation(pure: false)
 
+# Older headers give VS_USE_API_43 the deprecated VSColorRange, whose VSC_RANGE_FULL is 0.
+vs_release = run_command(
+    py, '-c', 'import vapoursynth as vs; print(vs.__version__.release_major)',
+    check: true,
+).stdout().strip().to_int()
+
+if vs_release < 82
+    error('VapourSynth R82 or later is required, but R@0@ was found'.format(vs_release))
+endif
+
 version = meson.project_version().split('.')
+
+vulkan_dep = dependency('vulkan',
+    fallback: ['vulkan-headers', 'vulkan_headers_dep'],
+    version: '>=1.4.304',
+).partial_dependency(compile_args: true, includes: true)
 
 add_project_arguments(
     '-DEDGEMASKS_VERSION_MAJOR=@0@'.format(version[0].to_int()),
     '-DEDGEMASKS_VERSION_MINOR=@0@'.format(version.get(1, '0').to_int()),
-    '-DVS_USE_API_42',
+    '-DVS_USE_API_43',
     '-ffp-contract=fast',
     '-fno-math-errno',
     '-fno-trapping-math',
@@ -45,7 +60,8 @@ if host_machine.cpu_family() == 'x86_64'
 endif
 
 shared_module('edgemasks',
-    files('src/edgemasks.cpp'),
+    files('src/edgemasks.cpp', 'src/edgemasks_vulkan.cpp'),
+    dependencies: vulkan_dep,
     gnu_symbol_visibility: 'hidden',
     install: true,
     install_dir: py.get_install_dir() / 'vapoursynth/plugins',

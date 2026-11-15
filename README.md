@@ -22,18 +22,23 @@ edgemasks.FDoG(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int opt=0
 edgemasks.ExKirsch(vnode clip[, int[] planes=[0, 1, 2], float[] scale=1.0, int opt=0])
 ```
 
-- clip: Clip to process. 8-16 bit integer and 32 bit float with constant format and dimensions are supported. The output frames will have `_Range` set to 1 (full range).
+- clip: Clip to process. 8-16 bit integer and 32 bit float with constant format and dimensions are supported. A GPU resident clip is filtered on the Vulkan device and stays there, and may also be 16 bit float. The output frames will have `_Range` set to 1 (full range).
 
 - planes: Specifies which planes will be processed. Any unprocessed planes will be simply copied.
 
 - scale: Multiplies all pixels by `scale` before outputting. This can be used to increase or decrease the intensity of edges in the output. Can be specified for each plane individually. When fewer values than planes are given, the last value is reused for the remaining planes.
 
-- opt: Specifies which cpu optimizations to use. Values 2-4 raise an error if the CPU does not support the instruction set to use, which is always the case on platforms other than x86-64.
+- opt: Specifies which cpu optimizations to use. Values 2-4 raise an error if the CPU does not support the instruction set to use, which is always the case on platforms other than x86-64. A GPU resident clip ignores it, though it must still be one of the values below.
   - 0 = auto detect
   - 1 = use c
   - 2 = use sse4.2
   - 3 = use avx2
   - 4 = use avx512, or avx2 if VapourSynth aligns frame strides to less than 64 bytes
+
+
+## GPU
+
+A GPU resident clip needs VapourSynth's Vulkan support, that is a device and driver with Vulkan 1.4. 16 bit float is filtered in half precision, which additionally needs the device's `shaderFloat16` feature.
 
 
 ## Installation

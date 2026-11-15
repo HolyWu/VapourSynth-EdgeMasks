@@ -31,7 +31,6 @@ SOFTWARE.
 #include <new>
 #include <stdexcept>
 #include <string>
-#include <tuple>
 #include <utility>
 
 #include <VapourSynth4.h>
@@ -47,6 +46,7 @@ SOFTWARE.
 
 #include "edgemasks.h"
 #include "edgemasks_kernel.h"
+#include "edgemasks_params.h"
 #include "edgemasks_simd.h"
 
 namespace edgemasks {
@@ -55,31 +55,6 @@ namespace {
 
 // In the order of the opt argument's values, as parseOpt casts the integer straight to Opt.
 enum class Opt { Auto, C, Sse4, Avx2, Avx512 };
-
-template<typename T>
-using PerPlane = std::array<T, 3>;
-
-struct NodeDeleter {
-    const VSAPI* vsapi;
-    void operator()(VSNode* node) const noexcept { vsapi->freeNode(node); }
-};
-
-struct FrameDeleter {
-    const VSAPI* vsapi;
-    void operator()(const VSFrame* frame) const noexcept { vsapi->freeFrame(frame); }
-};
-
-using NodePtr = std::unique_ptr<VSNode, NodeDeleter>;
-using FramePtr = std::unique_ptr<const VSFrame, FrameDeleter>;
-using NewFramePtr = std::unique_ptr<VSFrame, FrameDeleter>;
-
-struct FilterParams {
-    NodePtr node;
-    const VSVideoInfo* vi;
-    PerPlane<bool> process;
-    PerPlane<float> scale;
-    float peak;
-};
 
 template<Pixel pixel_t>
 struct EdgeMasksData {
@@ -128,24 +103,37 @@ int detectedInstrset() noexcept {
     static const int iset{ instrset_detect() };
     return iset;
 }
+
+// VapourSynth pads strides to 64 bytes only if AVX-512 was enabled when it loaded, and macOS enables it per thread on first use.
+bool stridesFitAvx512(VSCore* core, const VSAPI* vsapi) noexcept {
+    static const bool fits{ [=] {
+        VSVideoFormat format{};
+        vsapi->queryVideoFormat(&format, cfGray, stInteger, 8, 0, 0, core);
+        const FramePtr probe{ vsapi->newVideoFrame(&format, 1, 1, nullptr, core), FrameDeleter{ vsapi } };
+        return vsapi->getStride(probe.get(), 0) >= 64;
+    }() };
+    return fits;
+}
 #endif
 
 template<Pixel pixel_t>
-const FilterTable<pixel_t>& selectFilters(Opt opt, [[maybe_unused]] bool stridesFitAvx512) {
+const FilterTable<pixel_t>& selectFilters(Opt opt, [[maybe_unused]] VSCore* core, [[maybe_unused]] const VSAPI* vsapi) {
 #ifdef EDGEMASKS_X86
     constexpr int instrsetSse4{ 6 };
     constexpr int instrsetAvx2{ 8 };
     constexpr int instrsetAvx512{ 10 };
+    constexpr std::array optInstrsets{ 0, 0, instrsetSse4, instrsetAvx2, instrsetAvx512 };
 
     const int iset{ detectedInstrset() };
-    const int forcedInstrset{ opt == Opt::Avx512 && stridesFitAvx512 ? instrsetAvx512 : opt >= Opt::Avx2 ? instrsetAvx2 : opt == Opt::Sse4 ? instrsetSse4 : 0 };
+    int target{ opt == Opt::Auto ? iset : optInstrsets[static_cast<std::size_t>(opt)] };
 
-    if (iset < forcedInstrset)
+    if (target >= instrsetAvx512 && !stridesFitAvx512(core, vsapi))
+        target = instrsetAvx2;
+
+    if (iset < target)
         throw std::invalid_argument{ "opt selects an instruction set that the CPU does not support" };
 
-    const int target{ opt == Opt::Auto ? iset : forcedInstrset };
-
-    if (target >= instrsetAvx512 && stridesFitAvx512)
+    if (target >= instrsetAvx512)
         return filtersAvx512<pixel_t>();
 
     if (target >= instrsetAvx2)
@@ -192,14 +180,12 @@ const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instan
         vsapi->requestFrameFilter(n, node.get(), frameCtx);
     } else if (activationReason == arAllFramesReady) {
         const FramePtr src{ vsapi->getFrameFilter(n, node.get(), frameCtx), FrameDeleter{ vsapi } };
-        PerPlane<const VSFrame*> planeSrc{ process[0] ? nullptr : src.get(), process[1] ? nullptr : src.get(), process[2] ? nullptr : src.get() };
-        constexpr std::array planes{ 0, 1, 2 };
-        NewFramePtr dst{ vsapi->newVideoFrame2(&vi->format, vi->width, vi->height, planeSrc.data(), planes.data(), src.get(), core), FrameDeleter{ vsapi } };
+        NewFramePtr dst{ newSharingFrame(d.params, src.get(), core, vsapi) };
 
         try {
             filterFrame(d, src.get(), dst.get(), vsapi);
         } catch (const std::bad_alloc&) {
-            vsapi->setFilterError("EdgeMasks: out of memory", frameCtx);
+            vsapi->setFilterError((std::string{ name(d.params.op) } + ": out of memory").c_str(), frameCtx);
             return nullptr;
         }
 
@@ -208,11 +194,6 @@ const VSFrame* VS_CC edgemasksGetFrame(int n, int activationReason, void* instan
     }
 
     return nullptr;
-}
-
-template<Pixel pixel_t>
-void VS_CC edgemasksFree(void* instanceData, VSCore*, const VSAPI*) noexcept {
-    const std::unique_ptr<EdgeMasksData<pixel_t>> d{ static_cast<EdgeMasksData<pixel_t>*>(instanceData) };
 }
 
 PerPlane<bool> parsePlanes(const VSMap* in, const VSVideoFormat& format, const VSAPI* vsapi) {
@@ -260,8 +241,7 @@ void checkDimensions(const VSVideoInfo& vi, PerPlane<bool> process, int minimum)
 
     for (int plane = 0; plane < format.numPlanes; plane++) {
         if (process[plane]) {
-            const int planeWidth{ vi.width >> (plane > 0 ? format.subSamplingW : 0) };
-            const int planeHeight{ vi.height >> (plane > 0 ? format.subSamplingH : 0) };
+            const auto [planeWidth, planeHeight] = planeDimensions(vi, plane);
 
             if (planeWidth < minimum)
                 throw std::invalid_argument{ "plane " + std::to_string(plane) + "'s width must be greater than or equal to " + std::to_string(minimum) };
@@ -297,26 +277,10 @@ constexpr float scaleDivisor(Operator op) noexcept {
     }
 }
 
-// VapourSynth pads strides to 64 bytes only if AVX-512 was enabled when it loaded, and macOS enables it per thread on first use.
-bool stridesFitAvx512(VSCore* core, const VSAPI* vsapi) noexcept {
-    static const bool fits{ [=] {
-        VSVideoFormat format{};
-        vsapi->queryVideoFormat(&format, cfGray, stInteger, 8, 0, 0, core);
-        const FramePtr probe{ vsapi->newVideoFrame(&format, 1, 1, nullptr, core), FrameDeleter{ vsapi } };
-        return vsapi->getStride(probe.get(), 0) >= 64;
-    }() };
-    return fits;
-}
-
 template<Pixel pixel_t>
-void startFilter(FilterParams params, Operator op, Opt opt, VSMap* out, VSCore* core, const VSAPI* vsapi) {
-    const PlaneFilter<pixel_t> filter{ selectFilters<pixel_t>(opt, stridesFitAvx512(core, vsapi))[static_cast<std::size_t>(op)] };
-    auto d = std::make_unique<EdgeMasksData<pixel_t>>(std::move(params), filter);
-    const VSFilterDependency dependency{ d->params.node.get(), rpStrictSpatial };
-
-    vsapi->createVideoFilter(out, name(op), d->params.vi, edgemasksGetFrame<pixel_t>, edgemasksFree<pixel_t>, fmParallel, &dependency, 1, d.get(), core);
-    // The core owns d now and releases it through edgemasksFree. It can only refuse an invalid vi, and this vi is the input clip's.
-    std::ignore = d.release();
+void startFilter(FilterParams params, Opt opt, VSMap* out, VSCore* core, const VSAPI* vsapi) {
+    const PlaneFilter<pixel_t> filter{ selectFilters<pixel_t>(opt, core, vsapi)[static_cast<std::size_t>(params.op)] };
+    createNode(std::make_unique<EdgeMasksData<pixel_t>>(std::move(params), filter), edgemasksGetFrame<pixel_t>, 0, out, core, vsapi);
 }
 
 void createFilter(Operator op, const VSMap* in, VSMap* out, VSCore* core, const VSAPI* vsapi) noexcept {
@@ -325,10 +289,12 @@ void createFilter(Operator op, const VSMap* in, VSMap* out, VSCore* core, const 
         const VSVideoInfo* const vi = vsapi->getVideoInfo(node.get());
         const VSVideoFormat& format{ vi->format };
 
+        const bool gpu{ vsapi->getNodeResidency(node.get()) == nrGPU };
+
         if (!vsh::isConstantVideoFormat(vi) ||
             (format.sampleType == stInteger && format.bitsPerSample > 16) ||
-            (format.sampleType == stFloat && format.bitsPerSample != 32))
-            throw std::invalid_argument{ "only 8-16 bit integer and 32 bit float with constant format and dimensions supported" };
+            (format.sampleType == stFloat && format.bitsPerSample != 32 && !(gpu && format.bitsPerSample == 16)))
+            throw std::invalid_argument{ "only 8-16 bit integer and 32 bit float, or 16 bit float on the GPU, with constant format and dimensions supported" };
 
         const auto process = parsePlanes(in, format, vsapi);
         auto scale = parseScale(in, format, vsapi);
@@ -341,17 +307,22 @@ void createFilter(Operator op, const VSMap* in, VSMap* out, VSCore* core, const 
             value /= scaleDivisor(op);
 
         const float peak{ format.sampleType == stInteger ? static_cast<float>((1u << format.bitsPerSample) - 1u) : 0.0f };
-        FilterParams params{ .node = std::move(node), .vi = vi, .process = process, .scale = scale, .peak = peak };
+        FilterParams params{ .node = std::move(node), .vi = vi, .process = process, .scale = scale, .peak = peak, .op = op };
+
+        if (gpu) {
+            createVulkanFilter(std::move(params), out, core, vsapi);
+            return;
+        }
 
         switch (format.bytesPerSample) {
         case 1:
-            startFilter<std::uint8_t>(std::move(params), op, opt, out, core, vsapi);
+            startFilter<std::uint8_t>(std::move(params), opt, out, core, vsapi);
             break;
         case 2:
-            startFilter<std::uint16_t>(std::move(params), op, opt, out, core, vsapi);
+            startFilter<std::uint16_t>(std::move(params), opt, out, core, vsapi);
             break;
         default:
-            startFilter<float>(std::move(params), op, opt, out, core, vsapi);
+            startFilter<float>(std::move(params), opt, out, core, vsapi);
         }
     } catch (const std::exception& error) {
         vsapi->mapSetError(out, (std::string{ name(op) } + ": " + error.what()).c_str());
@@ -380,8 +351,8 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 
     withAllOperators([&](auto... ops) {
         (vspapi->registerFunction(name(decltype(ops)::value),
-                                  "clip:vnode;planes:int[]:opt;scale:float[]:opt;opt:int:opt;",
-                                  "clip:vnode;",
+                                  "clip:vnode:all;planes:int[]:opt;scale:float[]:opt;opt:int:opt;",
+                                  "clip:vnode:all;",
                                   edgemasksCreate<decltype(ops)::value>,
                                   nullptr,
                                   plugin), ...);
