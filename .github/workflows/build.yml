@@ -29,6 +29,10 @@ jobs:
         CIBW_CONFIG_SETTINGS_LINUX: setup-args=-Dcpp_link_args=-s
         CIBW_CONFIG_SETTINGS_MACOS: setup-args=-Dcpp_link_args=-Wl,-x
         CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=13.3
+        CIBW_TEST_COMMAND: >-
+          python -c "import vapoursynth as vs; core = vs.core;
+          [fn(core.std.BlankClip(format=f, width=64, height=48)).get_frame(0)
+          for f in (vs.GRAY8, vs.GRAY16, vs.GRAYS) for fn in core.edgemasks.functions()]"
       with:
         output-dir: dist
         extras: uv
