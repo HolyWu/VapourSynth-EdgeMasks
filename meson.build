@@ -3,7 +3,7 @@ project('EdgeMasks', 'cpp',
     license: 'Apache-2.0 AND MIT',
     license_files: ['src/vectorclass/LICENSE', 'LICENSE'],
     meson_version: '>=1.6.0',
-    version: '4.1',
+    version: '5.0',
 )
 
 libs = []
